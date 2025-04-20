@@ -41,6 +41,7 @@ jobs:
           app_location: "/Frontend" # App source code path
           api_location: "api" # Api source code path - optional
           output_location: "dist" # Built app content directory - optional
+          routes_location: "/Frontend" # Location of routes.json file
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
