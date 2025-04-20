@@ -19,9 +19,19 @@ jobs:
         with:
           submodules: true
           lfs: false
+      
+      # Add step to create .env file with proper API URL
+      - name: Create environment file
+        run: |
+          cd Frontend
+          echo "VITE_API_URL=https://hireit-ctcedrdzazhvgbfc.southeastasia-01.azurewebsites.net/api" > .env.production
+          cat .env.production
+      
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
+        env:
+          VITE_API_URL: https://hireit-ctcedrdzazhvgbfc.southeastasia-01.azurewebsites.net/api
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_RED_PLANT_0324CBA1E }}
           repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
