@@ -169,7 +169,7 @@ export const authService = {
         try {
             const response = await api.post('/users/register', userData);
             
-            // Store user data with token
+            // Store user data with token (if available)
             const initialUserData = {
                 id: response.data.userId,
                 email: userData.email,
@@ -178,17 +178,22 @@ export const authService = {
                 isEmailVerified: false,
                 hasCompletedProfile: false,
                 isInSignupFlow: true,
-                verificationEmailSent: true,
-                token: response.data.token,
-                isLoggedIn: true
+                verificationEmailSent: response.data.verificationEmailSent,
+                token: response.data.token || null, // Handle token if it exists
+                isLoggedIn: !!response.data.token // Only consider logged in if token exists
             };
+            
+            if (response.data.token) {
+                localStorage.setItem('token', response.data.token);
+            }
+            
             localStorage.setItem('userData', JSON.stringify(initialUserData));
-            localStorage.setItem('token', response.data.token);
             
             return {
                 userId: response.data.userId,
                 token: response.data.token,
-                message: response.data.message
+                message: response.data.message,
+                verificationEmailSent: response.data.verificationEmailSent
             };
         } catch (error) {
             console.error('Registration error:', error);
@@ -297,10 +302,46 @@ export const authService = {
 export const profileService = {
     createProfile: async (profileData) => {
         try {
+            // Validate and ensure data types are correct before sending
+            if (!profileData.userId || !Number.isInteger(profileData.userId)) {
+                throw new Error('Invalid userId: Must be an integer');
+            }
+            
+            if (!profileData.studentId) {
+                throw new Error('Invalid studentId: Student ID is required');
+            }
+            
+            if (!profileData.grade || !Number.isInteger(profileData.grade)) {
+                throw new Error('Invalid grade: Must be an integer');
+            }
+            
+            if (!profileData.section || typeof profileData.section !== 'string') {
+                throw new Error('Invalid section: Must be a string');
+            }
+            
+            console.log('Sending profile data to server:', {
+                userId: profileData.userId,
+                studentId: profileData.studentId,
+                grade: profileData.grade,
+                section: profileData.section
+            });
+            
             const response = await api.post('/users/profile', profileData);
+            console.log('Profile creation response:', response.data);
             return response.data;
         } catch (error) {
-            throw new Error(error.response?.data?.message || 'Profile creation failed');
+            console.error('Profile creation error details:', {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status,
+                profileData: {
+                    userId: profileData.userId,
+                    studentId: profileData.studentId,
+                    grade: profileData.grade,
+                    section: profileData.section
+                }
+            });
+            throw new Error(error.response?.data?.message || error.message || 'Profile creation failed');
         }
     },
 

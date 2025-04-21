@@ -26,7 +26,7 @@ const ManageUsers = () => {
           fullName: user.FullName || user.fullName || user.full_name,
           studentId: user.StudentId || user.studentId || user.student_id,
           userId: user.UserId || user.userId || user.user_id,
-          isAdmin: user.email === 'admin@cit.edu' || user.email === 'admin@citu.edu'
+          isAdmin: user.email === 'admin@citu.edu'
         }));
         setUsers(mappedUsers);
         setError(null);
@@ -59,12 +59,6 @@ const ManageUsers = () => {
     }
 
     try {
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      if (!userData.isAdmin) {
-        alert('Only administrators can delete users');
-        return;
-      }
-
       // Show loading state
       setLoading(true);
 
@@ -86,7 +80,7 @@ const ManageUsers = () => {
           fullName: user.FullName || user.fullName || user.full_name,
           studentId: user.StudentId || user.studentId || user.student_id,
           userId: user.UserId || user.userId || user.user_id,
-          isAdmin: user.email === 'admin@cit.edu' || user.email === 'admin@citu.edu'
+          isAdmin: user.email === 'admin@cit.edu'
         }));
         setUsers(mappedUsers);
       }
@@ -319,7 +313,7 @@ const ManageUsers = () => {
                           <button
                             onClick={() => handleDeleteUser(user.userId)}
                             className="bg-[#800000] text-white py-1.5 px-3 rounded-md hover:bg-[#a52a2a] transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center text-sm transform hover:translate-y-[-2px]"
-                            disabled={user.isAdmin}
+                            disabled={user.isAdmin && user.email !== JSON.parse(localStorage.getItem('userData') || '{}').email}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />

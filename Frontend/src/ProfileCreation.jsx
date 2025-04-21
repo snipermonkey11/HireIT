@@ -62,8 +62,8 @@ const ProfileCreation = () => {
     // Email validation
     if (!formData.email) {
       newErrors.email = 'Email is required';
-    } else if (!formData.email.endsWith('@cit.edu') && !formData.email.endsWith('@citu.edu')) {
-      newErrors.email = 'Please enter a valid institutional email (e.g., example@cit.edu or example@citu.edu)';
+    } else if (!formData.email.endsWith('@cit.edu')) {
+      newErrors.email = 'Please enter a valid institutional email (e.g., example@cit.edu)';
     }
     
     // Student ID validation
@@ -72,12 +72,6 @@ const ProfileCreation = () => {
       newErrors.studentId = 'Student ID is required';
     } else if (!studentIdRegex.test(formData.studentId)) {
       newErrors.studentId = 'Student ID must be in XX-XXXX-XXX format (e.g., 21-1234-567)';
-    } else {
-      // Make sure it can be converted to a valid integer when dashes are removed
-      const numericStudentId = formData.studentId.replace(/-/g, '');
-      if (!/^\d+$/.test(numericStudentId) || isNaN(parseInt(numericStudentId, 10))) {
-        newErrors.studentId = 'Student ID must contain only numbers';
-      }
     }
     
     // Grade validation
@@ -113,21 +107,32 @@ const ProfileCreation = () => {
         throw new Error('User ID not found. Please try logging in again.');
       }
 
-      // Check that studentId can be properly converted
-      const numericStudentId = formData.studentId.replace(/-/g, '');
-      if (!/^\d+$/.test(numericStudentId)) {
-        setError('Student ID must contain only numbers');
+      // Check that studentId format is valid
+      const studentIdRegex = /^\d{2}-\d{4}-\d{3}$/;
+      if (!studentIdRegex.test(formData.studentId)) {
+        setError('Student ID must be in XX-XXXX-XXX format (e.g., 21-1234-567)');
         setIsLoading(false);
         setIsSubmitting(false);
         return;
       }
       
+      // Convert grade to number and prepare userId as integer
+      const gradeNumber = parseInt(formData.grade, 10);
+      const userId = parseInt(userData.id, 10);
+      
+      console.log('Submitting profile with values:', {
+        userId: userId,
+        studentId: formData.studentId, // Keep as formatted string
+        grade: gradeNumber,
+        section: formData.section
+      });
+      
       const profileData = {
-        userId: userData.id,
+        userId: userId,
         fullName: formData.fullName,
         email: formData.email,
-        studentId: parseInt(formData.studentId.replace(/-/g, ''), 10),
-        grade: parseInt(formData.grade, 10),
+        studentId: formData.studentId, // Keep as formatted string
+        grade: gradeNumber,
         section: formData.section
       };
 
@@ -135,6 +140,14 @@ const ProfileCreation = () => {
       
       if (!response) {
         throw new Error('No response received from server');
+      }
+
+      // Check if token is included in the response (for reactivated accounts)
+      if (response.token) {
+        userData.token = response.token;
+        userData.isLoggedIn = true;
+        localStorage.setItem('token', response.token);
+        console.log('Token received from profile creation, stored in localStorage');
       }
 
       // Update user data in localStorage
@@ -157,6 +170,7 @@ const ProfileCreation = () => {
       } else {
         setError(err.message || 'Failed to create profile. Please check your information and try again.');
       }
+      console.error('Profile creation error:', err);
     } finally {
       setIsLoading(false);
       setIsSubmitting(false);
@@ -321,7 +335,7 @@ const ProfileCreation = () => {
                   type="email"
                   id="email"
                   name="email"
-                  placeholder="your.email@citu.edu"
+                  placeholder="your.email@cit.edu"
                   className={`pl-10 w-full px-4 py-3 border ${
                     errors.email ? 'border-red-500' : 'border-gray-300'
                   } rounded-lg focus:outline-none focus:ring-2 focus:ring-[#800000] focus:border-transparent transition-all duration-200`}

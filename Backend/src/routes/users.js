@@ -440,40 +440,84 @@ router.post('/register', async (req, res) => {
         }
 
         if (!email.endsWith('@cit.edu')) {
-            console.log('Invalid email domain');
+            console.log('Invalid email domain:', email);
             return res.status(400).json({ error: 'Please use your institutional email (@cit.edu)' });
         }
 
         const pool = await getPool();
 
-        // Check if user exists
+        // First check if the exact email exists
         const checkUser = await pool.request()
             .input('email', sql.VarChar, email)
-            .query('SELECT Email FROM Users WHERE Email = @email');
+            .query('SELECT Email, IsDeleted FROM Users WHERE Email = @email');
 
-        if (checkUser.recordset.length > 0) {
+        if (checkUser.recordset.length > 0 && !checkUser.recordset[0].IsDeleted) {
             console.log('Email already registered');
             return res.status(400).json({ error: 'Email already registered' });
         }
 
-        // Hash password
-        console.log('Hashing password...');
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Check if this is a previously deleted account (by searching for email with .deleted. suffix)
+        const checkDeletedQuery = `
+            SELECT UserId, Email, DeletedAt, IsDeleted 
+            FROM Users 
+            WHERE Email LIKE @emailPattern AND IsDeleted = 1
+        `;
+        
+        const checkDeleted = await pool.request()
+            .input('emailPattern', sql.VarChar, email + '.deleted.%')
+            .query(checkDeletedQuery);
+        
+        let userId;
+        
+        if (checkDeleted.recordset.length > 0) {
+            // This is a previously deleted account - reactivate it
+            console.log('Found previously deleted account, reactivating...');
+            const deletedUser = checkDeleted.recordset[0];
+            
+            // Hash new password
+            const hashedPassword = await bcrypt.hash(password, 10);
+            
+            // Reactivate the account by updating it
+            const reactivateResult = await pool.request()
+                .input('userId', sql.Int, deletedUser.UserId)
+                .input('email', sql.VarChar, email)
+                .input('hashedPassword', sql.VarChar, hashedPassword)
+                .input('fullName', sql.VarChar, fullName)
+                .query(`
+                    UPDATE Users
+                    SET 
+                        Email = @email,
+                        PasswordHash = @hashedPassword,
+                        FullName = @fullName,
+                        IsDeleted = 0,
+                        DeletedAt = NULL,
+                        IsVerified = 0,
+                        UpdatedAt = GETDATE()
+                    WHERE UserId = @userId;
+                    
+                    SELECT @userId as UserId;
+                `);
+                
+            userId = reactivateResult.recordset[0].UserId;
+            console.log('Account reactivated with ID:', userId);
+        } else {
+            // Create a new user
+            console.log('Creating new user...');
+            const hashedPassword = await bcrypt.hash(password, 10);
+            
+            const result = await pool.request()
+                .input('email', sql.VarChar, email)
+                .input('hashedPassword', sql.VarChar, hashedPassword)
+                .input('fullName', sql.VarChar, fullName)
+                .query(`
+                    INSERT INTO Users (Email, PasswordHash, FullName, Role, IsVerified)
+                    VALUES (@email, @hashedPassword, @fullName, 'user', 0);
+                    SELECT SCOPE_IDENTITY() as UserId;
+                `);
 
-        // Create user
-        console.log('Creating user...');
-        const result = await pool.request()
-            .input('email', sql.VarChar, email)
-            .input('hashedPassword', sql.VarChar, hashedPassword)
-            .input('fullName', sql.VarChar, fullName)
-            .query(`
-                INSERT INTO Users (Email, PasswordHash, FullName, Role, IsVerified)
-                VALUES (@email, @hashedPassword, @fullName, 'user', 0);
-                SELECT SCOPE_IDENTITY() as UserId;
-            `);
-
-        const userId = result.recordset[0].UserId;
-        console.log('User created with ID:', userId);
+            userId = result.recordset[0].UserId;
+            console.log('New user created with ID:', userId);
+        }
 
         // Generate verification token
         const verificationToken = jwt.sign(
@@ -768,10 +812,15 @@ router.get('/all', async (req, res) => {
 router.delete('/:userId', verifyToken, async (req, res) => {
     try {
         const { userId } = req.params;
+        const currentUser = req.user;
         
-        // Check if user is trying to delete their own account
-        if (req.user.userId !== parseInt(userId)) {
-            return res.status(403).json({ error: 'You can only delete your own account' });
+        // Allow deletion only if:
+        // 1. User is deleting their own account OR
+        // 2. User is an admin (based on role)
+        if (currentUser.userId !== parseInt(userId) && currentUser.role !== 'admin') {
+            return res.status(403).json({ 
+                error: 'Unauthorized: Only admins or the account owner can delete this account' 
+            });
         }
 
         const pool = await getPool();
@@ -795,6 +844,20 @@ router.delete('/:userId', verifyToken, async (req, res) => {
             END
         `);
 
+        // Check if the user being deleted is an admin
+        const userToDelete = await pool.request()
+            .input('userId', sql.Int, userId)
+            .query('SELECT Role FROM Users WHERE UserId = @userId');
+            
+        if (userToDelete.recordset.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Don't allow deletion of admin users unless it's self-deletion
+        if (userToDelete.recordset[0].Role === 'admin' && currentUser.userId !== parseInt(userId)) {
+            return res.status(403).json({ error: 'Admin accounts can only be deleted by the account owner' });
+        }
+
         // Update user to mark as deleted
         const result = await pool.request()
             .input('userId', sql.Int, userId)
@@ -815,8 +878,10 @@ router.delete('/:userId', verifyToken, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Return appropriate message based on who initiated the deletion
+        const isOwnAccount = currentUser.userId === parseInt(userId);
         res.json({ 
-            message: 'Account successfully deactivated',
+            message: isOwnAccount ? 'Your account was successfully deactivated' : 'Account successfully deactivated',
             userId: userId
         });
 
@@ -902,26 +967,55 @@ router.post('/profile', async (req, res) => {
         }
 
         // Validate data types
-        if (!Number.isInteger(userId) || !Number.isInteger(studentId) || !Number.isInteger(grade)) {
-            console.log('Invalid data types:', { userId, studentId, grade });
-            return res.status(400).json({ error: 'Invalid data types. userId, studentId, and grade must be integers.' });
+        if (!Number.isInteger(userId) || !Number.isInteger(grade)) {
+            console.log('Invalid data types:', { userId, grade });
+            return res.status(400).json({ error: 'Invalid data types. userId and grade must be integers.' });
+        }
+
+        // Validate studentId format (XX-XXXX-XXX)
+        if (typeof studentId !== 'string' && typeof studentId !== 'number') {
+            console.log('Invalid studentId type:', typeof studentId);
+            return res.status(400).json({ error: 'Invalid studentId type. Must be a string in XX-XXXX-XXX format or a number.' });
+        }
+
+        // Format studentId appropriately based on type
+        let formattedStudentId = studentId;
+        if (typeof studentId === 'string' && /^\d{2}-\d{4}-\d{3}$/.test(studentId)) {
+            // Already correctly formatted, keep as is
+            formattedStudentId = studentId;
+        } else if (typeof studentId === 'number') {
+            // Convert number to formatted string
+            const studentIdStr = studentId.toString().padStart(9, '0');
+            formattedStudentId = `${studentIdStr.substring(0, 2)}-${studentIdStr.substring(2, 6)}-${studentIdStr.substring(6, 9)}`;
         }
 
         // Check if user exists
         const pool = await getPool();
         const userCheck = await pool.request()
             .input('userId', sql.Int, userId)
-            .query('SELECT UserId FROM Users WHERE UserId = @userId');
+            .query('SELECT UserId, Email, IsDeleted FROM Users WHERE UserId = @userId');
 
         if (userCheck.recordset.length === 0) {
             console.log('User not found:', userId);
             return res.status(404).json({ error: 'User not found' });
         }
 
+        // Generate a JWT token for the user
+        const userEmail = userCheck.recordset[0].Email;
+        const token = jwt.sign(
+            { 
+                userId: userId,
+                email: userEmail,
+                isAdmin: false
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
         // Update user profile
         const updateResult = await pool.request()
             .input('userId', sql.Int, userId)
-            .input('studentId', sql.Int, studentId)
+            .input('studentId', sql.VarChar(15), formattedStudentId)
             .input('grade', sql.Int, grade)
             .input('section', sql.VarChar, section)
             .input('updatedAt', sql.DateTime, new Date())
@@ -952,7 +1046,8 @@ router.post('/profile', async (req, res) => {
                 section: updatedUser.Section,
                 isAdmin: updatedUser.Role === 'admin',
                 isVerified: updatedUser.IsVerified
-            }
+            },
+            token: token
         });
     } catch (error) {
         console.error('Profile creation error:', error);

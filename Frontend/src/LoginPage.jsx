@@ -123,7 +123,7 @@ const LoginPage = () => {
                   type="email"
                   id="email"
                   className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#800000] focus:border-transparent transition-all duration-200"
-                  placeholder="your.email@citu.edu"
+                  placeholder="your.email@cit.edu"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

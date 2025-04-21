@@ -53,8 +53,8 @@ const SignUpPage = () => {
       return false;
     }
 
-    if (!formData.email.endsWith('@cit.edu') && !formData.email.endsWith('@citu.edu')) {
-      setError('Please use your institutional email (@cit.edu or @citu.edu)');
+    if (!formData.email.endsWith('@cit.edu')) {
+      setError('Please use your institutional email (@cit.edu)');
       return false;
     }
 
@@ -209,12 +209,12 @@ const SignUpPage = () => {
                   value={formData.email}
                   onChange={handleInputChange}
                   className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#800000] focus:border-transparent transition-all duration-200"
-                  placeholder="your.email@citu.edu"
+                  placeholder="your.email@cit.edu"
                   disabled={isLoading}
                   required
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500">Please use your institutional email (@citu.edu)</p>
+              <p className="mt-1 text-xs text-gray-500">Please use your institutional email (@cit.edu)</p>
             </div>
 
             {/* Password Field */}
