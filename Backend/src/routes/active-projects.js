@@ -111,9 +111,32 @@ router.patch('/:projectId/complete', verifyToken, async (req, res) => {
     try {
         const { projectId } = req.params;
         const userId = req.user.userId;
+        
+        console.log(`[DEBUG] Attempting to mark project ${projectId} as completed for user ${userId}`);
+        
         const pool = await getPool();
 
-        // Verify the user is the freelancer
+        // First debug query to check if project exists at all
+        const projectExists = await pool.request()
+            .input('projectId', sql.Int, projectId)
+            .query(`
+                SELECT a.ApplicationId, a.Status, s.PostType, s.SellerId, a.UserId, s.Title
+                FROM Applications a
+                JOIN Services s ON a.ServiceId = s.ServiceId
+                WHERE a.ApplicationId = @projectId
+            `);
+            
+        if (projectExists.recordset.length > 0) {
+            const project = projectExists.recordset[0];
+            console.log(`[DEBUG] Project found: ID=${projectId}, Status=${project.Status}, PostType=${project.PostType}, SellerId=${project.SellerId}, ApplicantId=${project.UserId}`);
+        } else {
+            console.log(`[DEBUG] No project found with ID ${projectId}`);
+            return res.status(404).json({
+                error: 'Project not found'
+            });
+        }
+
+        // Verify the user is the freelancer with a more permissive query
         const projectCheck = await pool.request()
             .input('projectId', sql.Int, projectId)
             .input('userId', sql.Int, userId)
@@ -129,14 +152,49 @@ router.patch('/:projectId/complete', verifyToken, async (req, res) => {
                     -- Case 2: User is freelancer who posted a service that client applied to
                     (s.SellerId = @userId AND s.PostType = 'freelancer')
                 )
-                AND a.Status = 'Service Started'
+                -- Allow any status that makes sense for completion
+                AND a.Status IN ('Accepted', 'Service Started')
             `);
 
         if (!projectCheck.recordset[0]) {
-            return res.status(404).json({
-                error: 'Project not found or you are not authorized to complete it'
+            console.log(`[DEBUG] Authorization failed for user ${userId} on project ${projectId}`);
+            
+            // Additional debug check to see why authorization failed
+            const userRoleCheck = await pool.request()
+                .input('projectId', sql.Int, projectId)
+                .input('userId', sql.Int, userId)
+                .query(`
+                    SELECT 
+                        a.Status,
+                        s.PostType,
+                        s.SellerId,
+                        a.UserId,
+                        CASE 
+                            WHEN a.UserId = @userId THEN 'Applicant'
+                            WHEN s.SellerId = @userId THEN 'Service Owner'
+                            ELSE 'Not Related'
+                        END as UserRole,
+                        CASE
+                            WHEN s.PostType = 'client' AND a.UserId = @userId THEN 'Freelancer'
+                            WHEN s.PostType = 'freelancer' AND s.SellerId = @userId THEN 'Freelancer'
+                            ELSE 'Client'
+                        END as BusinessRole
+                    FROM Applications a
+                    JOIN Services s ON a.ServiceId = s.ServiceId
+                    WHERE a.ApplicationId = @projectId
+                `);
+                
+            if (userRoleCheck.recordset[0]) {
+                const role = userRoleCheck.recordset[0];
+                console.log(`[DEBUG] User role check: Status=${role.Status}, UserRole=${role.UserRole}, BusinessRole=${role.BusinessRole}`);
+            }
+            
+            return res.status(403).json({
+                error: 'You are not authorized to complete this project or it is not in the correct status'
             });
         }
+        
+        console.log(`[DEBUG] Authorization successful for user ${userId} on project ${projectId}, status: ${projectCheck.recordset[0].Status}`);
 
         // Update project status to Completed
         await pool.request()
@@ -148,6 +206,8 @@ router.patch('/:projectId/complete', verifyToken, async (req, res) => {
                     UpdatedAt = @updatedAt
                 WHERE ApplicationId = @projectId
             `);
+            
+        console.log(`[DEBUG] Successfully marked project ${projectId} as completed`);
 
         res.json({
             message: 'Project marked as completed successfully',

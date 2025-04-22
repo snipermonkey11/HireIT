@@ -389,13 +389,14 @@ export const transactionHistoryService = {
 
 // Review Service
 export const reviewService = {
-    submitReview: async (applicationId, rating, reviewText, userRole) => {
+    submitReview: async (applicationId, rating, reviewText, userRole, revieweeInfo = {}) => {
         try {
             console.log('Review submission params:', {
                 applicationId,
                 rating,
                 reviewText,
-                userRole: userRole || 'client'
+                userRole: userRole || 'client',
+                revieweeInfo
             });
             
             // Validate the userRole to ensure it's either 'client' or 'freelancer'
@@ -405,7 +406,10 @@ export const reviewService = {
                 applicationId,
                 rating,
                 reviewText,
-                userRole: validatedRole
+                userRole: validatedRole,
+                revieweeId: revieweeInfo.revieweeId,
+                revieweeRole: revieweeInfo.revieweeRole,
+                revieweeName: revieweeInfo.revieweeName
             });
             
             console.log('Review submission successful:', response.data);
@@ -495,12 +499,13 @@ export const reviewService = {
     getReceivedReviews: async () => {
         try {
             const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-            if (!userData.id) {
+            if (!userData.userId) {
                 console.error('No user ID available for getReceivedReviews');
                 return [];
             }
             
-            const response = await api.get(`/reviews/freelancer/${userData.id}`);
+            // Make the API call to get received reviews
+            const response = await api.get(`/reviews/received`);
             console.log('Received reviews response:', response.data);
             
             if (!response.data) {
@@ -667,14 +672,31 @@ export const messageService = {
     },
     
     // Send a message in a conversation
-    sendMessage: async (conversationId, message) => {
+    sendMessage: async (conversationId, content) => {
         try {
-            const response = await api.post(`/messages/conversations/${conversationId}/send`, {
-                content: message
+            const response = await api.post(`/messages`, {
+                conversationId,
+                content
             });
             return response.data;
         } catch (error) {
-            handleApiError(error);
+            console.error("Error sending message:", error);
+            throw error;
+        }
+    },
+    
+    // Send message with image
+    sendMessageWithImage: async (conversationId, formData) => {
+        try {
+            const response = await api.post(`/messages/with-image/${conversationId}`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error("Error sending message with image:", error);
+            throw error;
         }
     },
     

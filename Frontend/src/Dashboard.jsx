@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MessageSquare, Bell, Clock, PlayCircle, FileText, Activity, CreditCard, Star, Loader, AlertCircle, Upload, Save, Trash2, Eye, ArrowRight } from 'lucide-react';
+import { MessageSquare, Bell, Clock, PlayCircle, FileText, Activity, CreditCard, Star, Loader, AlertCircle, Upload, Save, Trash2, Eye, ArrowRight, UserCheck } from 'lucide-react';
 import { dashboardService, reviewService } from './services/api';
-import axios from 'axios';
+import api from './services/api';
 import { toast } from 'react-toastify';
 
 // Use a direct URL instead of process.env
@@ -27,7 +27,7 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [userRole, setUserRole] = useState('client'); // Default is client, will be updated if services exist
-  
+
   // Check if user is logged in
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -45,30 +45,44 @@ const Dashboard = () => {
       const token = localStorage.getItem('token');
       if (!token) return null;
       
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      // First try to get user profile from API
+      try {
+        const response = await api.get('/users/profile');
+        if (response.data) {
+          // Update state with API data
+          setProfile({
+            fullName: response.data.fullName,
+            email: response.data.email,
+            photo: response.data.photo || '',
+            bio: response.data.bio || '',
+            studentId: response.data.studentId || '',
+            grade: response.data.grade || '',
+            section: response.data.section || ''
+          });
+          return response.data;
+        }
+      } catch (error) {
+        console.log('Error fetching profile from API, using localStorage instead');
+      }
       
-      // If we already have userData, start with that
+      // If API fails, fall back to userData from localStorage
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       if (userData) {
-        return {
-          fullName: userData.fullName,
-          email: userData.email,
+        setProfile({
+          fullName: userData.fullName || '',
+          email: userData.email || '',
           photo: userData.photo || '',
           bio: userData.bio || '',
           studentId: userData.studentId || '',
           grade: userData.grade || '',
           section: userData.section || ''
-        };
+        });
+        return userData;
       }
       
-      // Otherwise try the API
-      const response = await axios.get(`${API_URL}/api/users/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      return response.data;
+      return null;
     } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
       return null;
     }
   };
@@ -89,23 +103,17 @@ const Dashboard = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      await axios.patch(`${API_URL}/api/users/profile`, data, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      await api.patch('/users/profile', data);
       
       // Update local storage
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       const updatedUserData = { ...userData, ...data };
       localStorage.setItem('userData', JSON.stringify(updatedUserData));
       
-      // Update local storage with new profile data
-      const storedProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
-      localStorage.setItem('userProfile', JSON.stringify({...storedProfile, ...data}));
-      
+      toast.success('Profile updated successfully');
     } catch (error) {
-      alert('Failed to update profile');
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
     }
   };
 
@@ -114,7 +122,7 @@ const Dashboard = () => {
       try {
         setIsLoading(true);
         
-        // Get profile info
+        // Get profile info - make sure this is called first
         await fetchUserProfile();
         
         // Get services posted by the user
@@ -341,7 +349,7 @@ const Dashboard = () => {
               <img
                 className="w-24 h-24 rounded-full border-4 border-[#ffd700] object-cover shadow-lg"
                 src={profile.photo || 'https://via.placeholder.com/150'}
-                alt="Profile"
+                alt={profile.fullName || 'Profile'}
               />
             </div>
             <div className="flex-1">
@@ -512,105 +520,8 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Client Reviews Section */}
-        <div className="p-6 bg-white rounded-xl shadow-lg border-t-4 border-[#ffd700]">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center">
-              <Star className="text-[#ffd700] mr-3" size={24} />
-              <h2 className="text-2xl font-bold text-gray-800">Reviews</h2>
-            </div>
-            <Link 
-              to="/reviews" 
-              className="px-4 py-2 bg-[#800000] text-white rounded-lg hover:bg-opacity-90 transition-all text-sm"
-            >
-              View All Reviews
-            </Link>
-          </div>
-          
-          <div className="space-y-6">
-            {/* Show reviews if user has received any as a freelancer */}
-            {reviews.length > 0 ? (
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Recent Reviews</h3>
-                <div className="space-y-4">
-                  {reviews.map((review) => (
-                    <div 
-                      key={review.ReviewId || review.id} 
-                      className={`p-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 
-                                 ${review.reviewType === 'received' ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-green-50 border-l-4 border-green-500'}`}
-                    >
-                      {/* Service Title */}
-                      <div className="flex justify-between items-start">
-                        <h3 className="text-xl font-bold text-[#800000]">{review.ServiceTitle || review.serviceTitle}</h3>
-                        
-                        {/* Rating */}
-                        <div className="flex items-center bg-[#ffd700] bg-opacity-20 px-3 py-1 rounded-full">
-                          <span className="text-sm font-semibold">{review.Rating || review.rating}</span>
-                          <Star size={16} className="ml-1 text-[#ffd700] fill-current" />
-                        </div>
-                      </div>
-                      
-                      {/* Review info badge */}
-                      <div className="mt-2 mb-3">
-                        <span 
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
-                                    ${review.reviewType === 'received' 
-                                      ? 'bg-blue-100 text-blue-800' 
-                                      : 'bg-green-100 text-green-800'}`}
-                        >
-                          {review.reviewType === 'received' ? 'Review Received' : 'Review Submitted'}
-                        </span>
-                      </div>
-                      
-                      {/* Who is involved in the review */}
-                      <p className="text-sm text-gray-700 font-medium">
-                        {review.displayText}
-                        {(review.CreatedAt || review.date) && 
-                          <span className="ml-2 text-gray-500">
-                            ({formatDate(review.CreatedAt || review.date)})
-                          </span>
-                        }
-                      </p>
-                      
-                      {/* Review Text */}
-                      <div className="mt-4 bg-white p-4 rounded-lg border border-gray-100">
-                        <p className="text-gray-800 italic">{review.ReviewText || review.reviewText || "No comment provided."}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* View all reviews link */}
-                <div className="text-center mt-4">
-                  <Link to="/reviews" className="text-[#800000] hover:underline font-medium inline-flex items-center">
-                    See all your reviews <ArrowRight size={16} className="ml-1" />
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                <Star size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-500">You don't have any reviews yet.</p>
-                <p className="text-gray-500 mt-2">Reviews will appear here after you complete transactions.</p>
-              </div>
-            )}
-            
-            {/* Message for all users about transaction history and submitting reviews */}
-            <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-100">
-              <div className="flex items-start">
-                <CreditCard size={20} className="text-blue-500 mr-2 mt-1 flex-shrink-0" />
-                <div>
-                  <p className="text-gray-700">
-                    You can leave reviews for completed transactions in your 
-                    <Link to="/transaction-history" className="mx-1 text-[#800000] font-medium hover:underline">
-                      Transaction History
-                    </Link>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Client Reviews Section - Removed */}
+        
       </div>
     </div>
   );

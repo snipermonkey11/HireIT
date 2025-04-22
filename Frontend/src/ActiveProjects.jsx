@@ -96,10 +96,10 @@ const ActiveProjects = () => {
           
           return {
             ...project,
-            isClient: false,
-            isFreelancer: true,
+            isClient: !(isFreelancerForClientPost || isFreelancerServiceOwner),
+            isFreelancer: isFreelancerForClientPost || isFreelancerServiceOwner,
             isFreelancerServiceOwner: isFreelancerServiceOwner,
-            userRole: 'Freelancer'
+            userRole: (isFreelancerForClientPost || isFreelancerServiceOwner) ? 'Freelancer' : 'Client'
           };
         });
       
@@ -272,21 +272,23 @@ const ActiveProjects = () => {
   const getStatusBadgeColor = (status) => {
     switch (status) {
       case 'Accepted':
-        return 'bg-green-500 text-white';
+        return 'bg-[#800000] text-[#ffd700]';
       case 'Service Started':
-        return 'bg-yellow-400 text-yellow-800';
+        return 'bg-[#ffd700] text-[#800000]';
       case 'Completed':
-        return 'bg-indigo-500 text-white';
+        return 'bg-[#800000] text-[#ffd700]';
       case 'Waiting for Approval':
-        return 'bg-purple-500 text-white';
+        return 'bg-[#800000] text-[#ffd700]';
       case 'Proof Rejected':
-        return 'bg-red-500 text-white';
+        return 'bg-[#800000] text-[#ffd700]';
+      case 'Approved':
+        return 'bg-[#ffd700] text-[#800000]';
       case 'Payment Sent':
-        return 'bg-green-500 text-white';
+        return 'bg-[#ffd700] text-[#800000]';
       case 'Payment Received':
-        return 'bg-emerald-500 text-white';
+        return 'bg-[#800000] text-[#ffd700]';
       default:
-        return 'bg-[#800000] text-white';
+        return 'bg-[#800000] text-[#ffd700]';
     }
   };
 
@@ -322,20 +324,28 @@ const ActiveProjects = () => {
     switch (Status) {
       case 'Service Started':
         return (
-          <button
-            onClick={() => handleMarkCompleted(ApplicationId)}
-            className="w-full py-3 px-4 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition-all flex items-center justify-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            Mark as Completed
-          </button>
+          <div>
+            <div className="bg-[#ffd700]/10 border border-[#ffd700]/30 rounded-lg p-3 mb-3 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3 3a1 1 0 01-1.414 0l-1.5-1.5a1 1 0 011.414-1.414l.793.793 2.293-2.293a1 1 0 011.414 1.414z" clipRule="evenodd" />
+              </svg>
+              <p className="text-[#800000] text-sm">Project in progress. Mark as completed when done.</p>
+            </div>
+            <button
+              onClick={() => handleMarkCompleted(ApplicationId)}
+              className="w-full py-3 px-4 bg-[#800000] text-[#ffd700] rounded-lg font-semibold hover:bg-[#9a0000] transition-all flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Mark as Completed
+            </button>
+          </div>
         );
       case 'Completed':
         return (
           <div>
-            <p className="text-gray-700 mb-2 text-sm">Upload proof of the completed work:</p>
+            <p className="text-[#800000] mb-2 text-sm">Upload proof of the completed work:</p>
             <div className="relative">
               <input
                 type="file"
@@ -345,12 +355,12 @@ const ActiveProjects = () => {
                 disabled={!!uploading}
               />
               <button
-                className={`w-full py-3 px-4 ${uploading === ApplicationId ? 'bg-gray-400' : 'bg-blue-500 hover:bg-blue-600'} text-white rounded-lg font-semibold transition-all flex items-center justify-center`}
+                className={`w-full py-3 px-4 ${uploading === ApplicationId ? 'bg-gray-400' : 'bg-[#800000] hover:bg-[#9a0000]'} text-[#ffd700] rounded-lg font-semibold transition-all flex items-center justify-center`}
                 disabled={!!uploading}
               >
                 {uploading === ApplicationId ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-[#ffd700]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -371,7 +381,12 @@ const ActiveProjects = () => {
       case 'Proof Rejected':
         return (
           <div>
-            <p className="text-red-600 mb-2 text-sm">Your proof was rejected. Please upload a new one:</p>
+            <div className="bg-[#800000]/10 border border-[#800000]/30 rounded-lg p-3 mb-3 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <p className="text-[#800000] text-sm">Your proof was rejected. Please upload a new one.</p>
+            </div>
             <div className="relative">
               <input
                 type="file"
@@ -381,12 +396,12 @@ const ActiveProjects = () => {
                 disabled={!!uploading}
               />
               <button
-                className={`w-full py-3 px-4 ${uploading === ApplicationId ? 'bg-gray-400' : 'bg-blue-500 hover:bg-blue-600'} text-white rounded-lg font-semibold transition-all flex items-center justify-center`}
+                className={`w-full py-3 px-4 ${uploading === ApplicationId ? 'bg-gray-400' : 'bg-[#800000] hover:bg-[#9a0000]'} text-[#ffd700] rounded-lg font-semibold transition-all flex items-center justify-center`}
                 disabled={!!uploading}
               >
                 {uploading === ApplicationId ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-[#ffd700]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -406,20 +421,36 @@ const ActiveProjects = () => {
         );
       case 'Waiting for Approval':
         return (
-          <div className="py-3 px-4 bg-purple-50 text-purple-700 rounded-lg text-center border border-purple-200">
-            <p>Your proof has been submitted and is waiting for client review</p>
+          <div className="py-4 px-4 bg-[#ffd700]/5 rounded-lg text-center border border-[#ffd700]/30">
+            <p className="text-[#800000] mb-3">Your proof has been submitted and is waiting for client review</p>
+            <div className="mx-auto w-20 h-20 relative">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-12 h-12 text-[#800000]" fill="none">
+                  <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div className="absolute inset-0 animate-spin-slow">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-20 h-20 text-[#ffd700]" fill="none">
+                  <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                </svg>
+              </div>
+            </div>
+            <p className="text-[#800000]/70 mt-3 text-sm italic">Waiting for client review</p>
           </div>
         );
       case 'Approved':
         return (
-          <div className="py-3 px-4 bg-green-100 text-green-800 rounded-lg text-center border border-green-200">
-            <div className="flex items-center justify-center mb-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="font-semibold">Proof approved successfully!</span>
+          <div className="py-4 px-4 bg-[#ffd700]/10 rounded-lg text-center border border-[#ffd700]/30">
+            <div className="flex items-center justify-center mb-3">
+              <div className="w-8 h-8 rounded-full bg-[#800000] flex items-center justify-center shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#ffd700]" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <span className="font-semibold text-[#800000] ml-2">Proof approved successfully!</span>
             </div>
-            <p className="text-sm">Waiting for client to process payment. You'll be notified when payment is sent.</p>
+            <p className="text-[#800000]/80 text-sm">Waiting for client to process payment. You'll be notified when payment is sent.</p>
           </div>
         );
       case 'Payment Sent':
@@ -427,11 +458,11 @@ const ActiveProjects = () => {
           <button
             onClick={() => handlePaymentReceived(ApplicationId)}
             disabled={!!uploading}
-            className={`w-full py-3 px-4 ${uploading === ApplicationId ? 'bg-gray-400' : 'bg-green-500 hover:bg-green-600'} text-white rounded-lg font-semibold transition-all flex items-center justify-center`}
+            className={`w-full py-3 px-4 ${uploading === ApplicationId ? 'bg-gray-400' : 'bg-[#800000] hover:bg-[#9a0000]'} text-[#ffd700] rounded-lg font-semibold transition-all flex items-center justify-center`}
           >
             {uploading === ApplicationId ? (
               <>
-                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-[#ffd700]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
@@ -449,9 +480,19 @@ const ActiveProjects = () => {
         );
       case 'Payment Received':
         return (
-          <div className="py-3 px-4 bg-green-100 text-green-800 rounded-lg text-center border border-green-200">
-            <p className="font-semibold">Payment received successfully!</p>
-            <p className="text-xs mt-1">Project completed</p>
+          <div className="py-4 px-4 bg-[#ffd700]/10 rounded-lg text-center border border-[#ffd700]/30">
+            <div className="flex items-center justify-center mb-2">
+              <div className="w-8 h-8 rounded-full bg-[#800000] flex items-center justify-center shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#ffd700]" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <span className="font-semibold text-[#800000] ml-2">Payment received successfully!</span>
+            </div>
+            <div className="inline-block px-3 py-1 rounded-full bg-[#800000]/10 text-[#800000] text-xs font-medium">
+              Project completed
+            </div>
           </div>
         );
       default:
@@ -505,13 +546,13 @@ const ActiveProjects = () => {
     <div className="min-h-screen bg-[#f8f5f0] py-10 px-4 sm:px-6">
       <div className="container mx-auto max-w-6xl animate-fadeIn">
         {/* Header */}
-        <div className="bg-[#800000] text-white p-6 sm:p-8 rounded-t-2xl shadow-xl mb-8">
+        <div className="bg-gradient-to-r from-[#800000] to-[#9a0000] text-white p-6 sm:p-8 rounded-t-2xl shadow-xl mb-8 border-b-4 border-[#ffd700]">
           <h2 className="text-2xl sm:text-3xl font-bold tracking-wider flex items-center">
-            <span className="text-[#ffd700] mr-2">|</span> 
-            Active Projects
-            <span className="ml-2 text-[#ffd700]">|</span>
+            <span className="text-[#ffd700] mr-3">|</span> 
+            <span className="text-[#ffd700]">Active Projects</span>
+            <span className="ml-3 text-[#ffd700]">|</span>
           </h2>
-          <p className="text-gray-200 mt-2 opacity-80">
+          <p className="text-gray-200 mt-2 opacity-90 pl-4 border-l-2 border-[#ffd700]/50">
             Manage your active projects as a freelancer
           </p>
         </div>
@@ -537,13 +578,13 @@ const ActiveProjects = () => {
             {activeProjects.map((project, index) => (
               <div
                 key={project.ApplicationId}
-                className="bg-white rounded-xl shadow-xl overflow-hidden transform transition-all duration-500 hover:shadow-2xl hover:-translate-y-1"
+                className="bg-white rounded-xl shadow-xl overflow-hidden transform transition-all duration-500 hover:shadow-2xl hover:-translate-y-1 border border-[#ffd700]/10"
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                {/* Project Header */}
+                {/* Project Header with Image */}
                 <div className="relative">
                   {project.ServiceImage ? (
-                    <div className="relative h-48 overflow-hidden">
+                    <div className="relative h-40 overflow-hidden">
                       <img
                         src={project.ServiceImage}
                         alt={project.ServiceTitle}
@@ -553,102 +594,122 @@ const ActiveProjects = () => {
                           e.target.src = '/default-service.png';
                         }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#800000] to-transparent opacity-80"></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#800000] to-transparent opacity-50"></div>
                     </div>
                   ) : (
-                    <div className="h-32 bg-gradient-to-r from-[#800000] to-[#600000]"></div>
+                    <div className="h-40 bg-gradient-to-r from-[#800000] to-[#9a0000]"></div>
                   )}
                   
                   <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
                     <h3 className="text-xl font-bold">{project.ServiceTitle}</h3>
                     <div className="flex items-center mt-1">
-                      <span className="text-sm opacity-90 mr-2">
-                        Client: {project.ServiceOwnerName}
-                      </span>
-                      <span className="ml-1 bg-white text-[#800000] text-xs px-2 py-0.5 rounded-full font-bold">
+                      <span className="ml-1 bg-[#ffd700] text-[#800000] text-xs px-2 py-0.5 rounded-full font-bold">
                         {project.PostType === 'client' ? 'Client Request' : 'Freelancer Service'}
                       </span>
                     </div>
                   </div>
                 </div>
                 
-                {/* Project Body */}
-                <div className="p-6">
-                  {/* Status Badge */}
-                  <div className="flex items-center mb-4">
-                    <div className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusBadgeColor(project.Status)}`}>
+                {/* Status and Price Bar */}
+                <div className="px-4 py-3 border-b border-[#ffd700]/10 flex items-center justify-between bg-[#ffd700]/5">
+                  <div className="flex items-center">
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusBadgeColor(project.Status)}`}>
                       {getStatusText(project)}
                     </div>
-                    <div className="ml-2 px-3 py-1 bg-gray-200 text-gray-800 rounded-full text-xs font-semibold">
-                      Freelancer
+                    <div className="ml-2 px-2 py-0.5 bg-[#800000] text-[#ffd700] rounded-full text-xs font-semibold shadow-sm">
+                      {project.userRole}
                     </div>
                   </div>
+                  <p className="text-[#800000] text-sm font-bold">₱{project.ServicePrice}</p>
+                </div>
+                
+                {/* Main Action Area */}
+                <div className="p-4">
+                  {/* Action Button */}
+                  {getActionButton(project)}
                   
-                  {/* Project Details */}
-                  <div className="mb-4">
-                    <p className="text-gray-600 mb-2">Price: ₱{project.ServicePrice}</p>
-                    
-                    {/* Improved project relationship info */}
-                    <div className="bg-gray-50 p-3 rounded-lg mb-3 border border-gray-100">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Project Relationship:</h4>
-                      {project.relationshipDescription && (
-                        <p className="text-sm text-gray-700 mb-2">{project.relationshipDescription}</p>
-                      )}
-                      
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <div className="bg-white p-2 rounded border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase">PROJECT POSTED BY</p>
-                          <p className="font-medium text-sm">{project.postedByName || project.ServiceOwnerName}</p>
-                          <p className="text-xs text-blue-600">
-                            {/* If it's a client post, the poster is a client */}
-                            ({project.PostType === 'client' ? 'client' : 'freelancer'})
-                          </p>
-                        </div>
-                        
-                        <div className="bg-white p-2 rounded border border-gray-200">
-                          <p className="text-xs text-gray-500 uppercase">APPLIED BY</p>
-                          <p className="font-medium text-sm">{project.appliedByName || project.FreelancerName}</p>
-                          <p className="text-xs text-green-600">
-                            {/* If it's a client post, the applicant is a freelancer */}
-                            ({project.PostType === 'client' ? 'freelancer' : 'client'})
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {project.ApplicationMessage && (
-                      <p className="text-gray-600 mb-2">
-                        <span className="font-semibold">Your Application:</span> {project.ApplicationMessage}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Show proof image for freelancers when proof is available */}
-                  {project.isFreelancer && project.ProofImage && ['Waiting for Approval', 'Proof Rejected', 'Approved', 'Payment Sent', 'Payment Received'].includes(project.Status) && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Submitted Proof:</h4>
-                      <div className="bg-gray-100 p-2 rounded-md">
+                  {/* Proof Image (if available) */}
+                  {project.isFreelancer && project.ProofImage && 
+                   ['Waiting for Approval', 'Proof Rejected', 'Approved', 'Payment Sent', 'Payment Received'].includes(project.Status) && (
+                    <div className="mt-4">
+                      <div className="bg-[#ffd700]/5 p-2 rounded-md border border-[#ffd700]/20">
                         <img 
                           src={project.ProofImage} 
-                          alt="Proof of completion" 
-                          className="w-full h-32 object-contain rounded"
+                          alt="Proof" 
+                          className="w-full h-24 object-contain rounded"
                           onError={(e) => {
                             e.target.onerror = null;
                             e.target.src = '/default-service.png';
                           }}
                         />
+                        <p className="text-xs text-[#800000] mt-1 italic text-center">
+                          {project.Status === 'Waiting for Approval' && "Waiting for client review"}
+                          {project.Status === 'Proof Rejected' && "Rejected by client - Please upload new proof"}
+                          {project.Status === 'Approved' && "Proof approved by client"}
+                          {(project.Status === 'Payment Sent' || project.Status === 'Payment Received') && "Completed proof"}
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1 italic">
-                        {project.Status === 'Waiting for Approval' && "Waiting for client review"}
-                        {project.Status === 'Proof Rejected' && "Rejected by client"}
-                        {project.Status === 'Approved' && "Approved by client"}
-                        {(project.Status === 'Payment Sent' || project.Status === 'Payment Received') && "Completed proof"}
-                      </p>
                     </div>
                   )}
-
-                  {/* Action Button */}
-                  {getActionButton(project)}
+                </div>
+                
+                {/* Project Details (Collapsible) */}
+                <div className="px-4 pb-4">
+                  <details className="group">
+                    <summary className="list-none flex items-center justify-between cursor-pointer">
+                      <span className="text-sm font-medium text-[#800000]">View Project Details</span>
+                      <span className="text-[#800000] transition-transform duration-300 group-open:rotate-180">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                      </span>
+                    </summary>
+                    
+                    <div className="mt-3 pt-3 border-t border-[#ffd700]/10">
+                      {/* Project relationship info - Enhanced */}
+                      <div className="mb-3 rounded-lg overflow-hidden border border-[#ffd700]/30 shadow-sm">
+                        <div className="bg-gradient-to-r from-[#800000] to-[#9a0000] px-3 py-2 text-[#ffd700] text-sm font-semibold">
+                          Project Relationship
+                        </div>
+                        <div className="grid grid-cols-2 divide-x divide-[#ffd700]/20">
+                          <div className="p-3 bg-gradient-to-b from-[#ffd700]/10 to-transparent">
+                            <div className="flex items-center mb-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#800000] mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                              </svg>
+                              <p className="text-xs font-semibold text-[#800000]">PROJECT POSTED BY</p>
+                            </div>
+                            <p className="font-medium text-sm">{project.postedByName || project.ServiceOwnerName}</p>
+                            <p className="text-xs mt-1 inline-block px-2 py-0.5 rounded-full bg-[#800000]/10 text-[#800000]">
+                              {project.PostType === 'client' ? 'Client' : 'Freelancer'}
+                            </p>
+                          </div>
+                          
+                          <div className="p-3 bg-gradient-to-b from-[#ffd700]/10 to-transparent">
+                            <div className="flex items-center mb-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#800000] mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8z" />
+                                <path d="M12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+                              </svg>
+                              <p className="text-xs font-semibold text-[#800000]">APPLIED BY</p>
+                            </div>
+                            <p className="font-medium text-sm">{project.appliedByName || project.FreelancerName}</p>
+                            <p className="text-xs mt-1 inline-block px-2 py-0.5 rounded-full bg-[#800000]/10 text-[#800000]">
+                              {project.PostType === 'client' ? 'Freelancer' : 'Client'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {project.ApplicationMessage && (
+                        <div className="mt-2">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-semibold text-[#800000]">Your Application:</span> {project.ApplicationMessage}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 </div>
               </div>
             ))}
@@ -658,5 +719,18 @@ const ActiveProjects = () => {
     </div>
   );
 };
+
+// Add custom animation for spinner
+const spinStyle = document.createElement('style');
+spinStyle.textContent = `
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .animate-spin-slow {
+    animation: spin-slow 3s linear infinite;
+  }
+`;
+document.head.appendChild(spinStyle);
 
 export default ActiveProjects;

@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const { sql, getPool } = require('../config/database');
 const verifyToken = require('../middleware/verifyToken');
+const fileUpload = require('express-fileupload');
+
+// Configure middleware
+router.use(fileUpload({
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    abortOnLimit: true,
+    createParentPath: true,
+    useTempFiles: false,
+    debug: true,
+    parseNested: true
+}));
 
 // Get all conversations for the current user
 router.get('/conversations', verifyToken, async (req, res) => {
@@ -66,6 +77,7 @@ router.get('/conversations', verifyToken, async (req, res) => {
                             MessageId,
                             SenderId,
                             Content,
+                                Image,
                             IsRead,
                             CreatedAt
                         FROM Messages
@@ -104,6 +116,7 @@ router.get('/conversations', verifyToken, async (req, res) => {
                     lastMessageTime: latestMessage ? latestMessage.CreatedAt : conversation.CreatedAt,
                     lastMessageSenderId: latestMessage ? latestMessage.SenderId : null,
                     isLastMessageFromCurrentUser: isLatestMessageFromCurrentUser,
+                    lastMessageImage: latestMessage ? latestMessage.Image : null,
                     unreadCount: unreadCount
                 };
             })
@@ -180,6 +193,7 @@ router.get('/conversations/:conversationId', verifyToken, async (req, res) => {
                     MessageId as id,
                     SenderId as senderId,
                     Content as content,
+                    Image as image,
                     IsRead as isRead,
                     CreatedAt as createdAt
                 FROM Messages
@@ -563,6 +577,164 @@ router.delete('/conversations/:conversationId', verifyToken, async (req, res) =>
         
         return res.status(500).json({ 
             error: 'Failed to delete conversation', 
+            details: error.message 
+        });
+    }
+});
+
+// Send a message with image
+router.post('/with-image/:conversationId', verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const conversationId = parseInt(req.params.conversationId);
+        const content = req.body && req.body.content ? req.body.content : '';
+        
+        // Check if we have a valid file upload
+        if (!req.files || !req.files.image) {
+            return res.status(400).json({ error: 'No image file uploaded' });
+        }
+        
+        const imageFile = req.files.image;
+        
+        // Validate image type
+        if (!imageFile.mimetype.startsWith('image/')) {
+            return res.status(400).json({ error: 'Uploaded file is not an image' });
+        }
+        
+        // Check file size (5MB limit)
+        const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+        if (imageFile.size > maxSize) {
+            return res.status(400).json({ error: 'Image size exceeds 5MB limit' });
+        }
+        
+        // First check if the user is part of this conversation
+        const pool = await getPool();
+        const checkResult = await pool.request()
+            .input('conversationId', sql.Int, conversationId)
+            .input('userId', sql.Int, userId)
+            .query(`
+                SELECT ConversationId, User1Id, User2Id
+                FROM Conversations 
+                WHERE ConversationId = @conversationId
+                AND (User1Id = @userId OR User2Id = @userId)
+            `);
+            
+        if (checkResult.recordset.length === 0) {
+            return res.status(404).json({ 
+                error: 'Conversation not found or you do not have permission to send messages in it' 
+            });
+        }
+        
+        // Convert image to base64 and include MIME type prefix
+        const imageBase64 = imageFile.data.toString('base64');
+        const imageWithMimeType = `data:${imageFile.mimetype};base64,${imageBase64}`;
+        
+        // Insert the new message with image
+        const result = await pool.request()
+            .input('conversationId', sql.Int, conversationId)
+            .input('senderId', sql.Int, userId)
+            .input('content', sql.NVarChar(1000), content.trim())
+            .input('image', sql.NVarChar(sql.MAX), imageWithMimeType)
+            .query(`
+                INSERT INTO Messages (ConversationId, SenderId, Content, Image, IsRead, CreatedAt)
+                OUTPUT INSERTED.MessageId, INSERTED.ConversationId, INSERTED.SenderId, 
+                       INSERTED.Content, INSERTED.Image, INSERTED.IsRead, INSERTED.CreatedAt
+                VALUES (@conversationId, @senderId, @content, @image, 0, GETDATE())
+            `);
+        
+        if (result.recordset.length === 0) {
+            throw new Error('Failed to insert message with image');
+        }
+        
+        // Format for response - use the stored value with mime type
+        const message = {
+            id: result.recordset[0].MessageId,
+            uniqueTimestamp: new Date().getTime(),
+            conversationId: result.recordset[0].ConversationId,
+            senderId: result.recordset[0].SenderId,
+            content: result.recordset[0].Content,
+            image: result.recordset[0].Image,
+            isRead: !!result.recordset[0].IsRead,
+            createdAt: result.recordset[0].CreatedAt
+        };
+        
+        console.log(`Message with image sent to conversation ${conversationId}`);
+        
+        return res.status(201).json(message);
+    } catch (error) {
+        console.error('Error sending message with image:', error);
+        return res.status(500).json({ 
+            error: 'Failed to send message with image', 
+            details: error.message 
+        });
+    }
+});
+
+// Create a new message
+router.post('/', verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { conversationId, content } = req.body;
+        
+        if (!conversationId || !Number.isInteger(parseInt(conversationId))) {
+            return res.status(400).json({ error: 'Valid conversation ID is required' });
+        }
+        
+        if (!content || typeof content !== 'string' || content.trim().length === 0) {
+            return res.status(400).json({ error: 'Message content is required' });
+        }
+        
+        const parsedConversationId = parseInt(conversationId);
+        
+        const pool = await getPool();
+        
+        // Check if user is part of conversation
+        const checkResult = await pool.request()
+            .input('conversationId', sql.Int, parsedConversationId)
+            .input('userId', sql.Int, userId)
+            .query(`
+                SELECT ConversationId
+                FROM Conversations 
+                WHERE ConversationId = @conversationId
+                AND (User1Id = @userId OR User2Id = @userId)
+            `);
+            
+        if (checkResult.recordset.length === 0) {
+            return res.status(404).json({ 
+                error: 'Conversation not found or you do not have permission to send messages in it' 
+            });
+        }
+        
+        // Insert message
+        const result = await pool.request()
+            .input('conversationId', sql.Int, parsedConversationId)
+            .input('senderId', sql.Int, userId)
+            .input('content', sql.NVarChar(1000), content.trim())
+            .query(`
+                INSERT INTO Messages (ConversationId, SenderId, Content, IsRead, CreatedAt)
+                OUTPUT INSERTED.MessageId, INSERTED.ConversationId, INSERTED.SenderId, 
+                       INSERTED.Content, INSERTED.IsRead, INSERTED.CreatedAt
+                VALUES (@conversationId, @senderId, @content, 0, GETDATE())
+            `);
+        
+        if (result.recordset.length === 0) {
+            throw new Error('Failed to insert message');
+        }
+        
+        const message = {
+            id: result.recordset[0].MessageId,
+            conversationId: result.recordset[0].ConversationId,
+            senderId: result.recordset[0].SenderId,
+            content: result.recordset[0].Content,
+            isRead: !!result.recordset[0].IsRead,
+            createdAt: result.recordset[0].CreatedAt
+        };
+        
+        return res.status(201).json(message);
+    } catch (error) {
+        console.error('Error creating message:', error);
+        return res.status(500).json({ 
+            error: 'Failed to create message', 
             details: error.message 
         });
     }

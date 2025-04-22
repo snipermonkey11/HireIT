@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { reviewService } from './services/api';
-import { Star, AlertCircle, ArrowLeft, Loader2, User } from 'lucide-react';
+import { Star, AlertCircle, ArrowLeft, Loader2, User, UserCheck, Filter, Clock, CheckCircle } from 'lucide-react';
 
 const Reviews = () => {
   const navigate = useNavigate();
@@ -117,9 +117,9 @@ const Reviews = () => {
           <Star
             key={star}
             size={18}
-            fill={star <= rating ? '#FFC107' : 'none'}
-            stroke={star <= rating ? '#FFC107' : 'currentColor'}
-            className={star <= rating ? 'text-yellow-500' : 'text-gray-400'}
+            fill={star <= rating ? '#FFD700' : 'none'}
+            stroke={star <= rating ? '#FFD700' : 'currentColor'}
+            className={star <= rating ? 'text-[#FFD700]' : 'text-gray-300'}
           />
         ))}
       </div>
@@ -138,25 +138,30 @@ const Reviews = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-maroon-600"></div>
-        <p className="mt-4 text-gray-700">Loading your reviews...</p>
+      <div className="min-h-screen bg-[#f8f5f0] flex flex-col items-center justify-center p-4">
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 rounded-full border-4 border-[#800000] border-t-[#FFD700] animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Star className="text-[#FFD700]" size={24} fill="#FFD700" />
+          </div>
+        </div>
+        <p className="mt-6 text-[#800000] font-medium animate-pulse">Loading your reviews...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6 text-center">
-          <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Error</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+      <div className="min-h-screen bg-[#f8f5f0] flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center border-t-4 border-[#800000]">
+          <AlertCircle size={48} className="mx-auto text-[#800000] mb-4" />
+          <h2 className="text-2xl font-bold text-[#800000] mb-2">Error</h2>
+          <p className="text-[#800000]/70 mb-6">{error}</p>
           <button 
             onClick={() => navigate('/dashboard')} 
-            className="px-4 py-2 bg-[#800000] text-white rounded-md hover:bg-opacity-90 transition-all flex items-center space-x-2 mx-auto"
+            className="px-6 py-3 bg-[#800000] text-[#FFD700] rounded-full hover:bg-opacity-90 transition-all shadow-md flex items-center justify-center mx-auto"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={18} className="mr-2" />
             <span>Back to Dashboard</span>
           </button>
         </div>
@@ -167,122 +172,166 @@ const Reviews = () => {
   const filteredReviews = getFilteredReviews();
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-[#f8f5f0] p-6">
       <div className="container mx-auto max-w-4xl">
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden border-t-4 border-[#800000]">
           <div className="p-6">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center">
                 <button 
                   onClick={() => navigate('/dashboard')} 
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 mr-3 bg-[#800000]/10 hover:bg-[#800000]/20 rounded-full transition-all text-[#800000]"
                 >
-                  <ArrowLeft size={20} className="text-gray-600" />
+                  <ArrowLeft size={20} />
                 </button>
-                <h2 className="text-2xl font-bold text-gray-800">
-                  My Reviews
-                </h2>
+                <div>
+                  <h2 className="text-2xl font-bold text-[#800000] flex items-center">
+                    <Star className="mr-2 text-[#FFD700]" size={24} fill="#FFD700" />
+                    My Reviews
+                  </h2>
+                  <p className="text-[#800000]/70 text-sm mt-1">
+                    View all reviews you've received and submitted
+                  </p>
+                </div>
               </div>
             </div>
             
             {/* Tab Navigation */}
-            <div className="flex border-b border-gray-200 mb-6">
+            <div className="flex border-b border-[#FFD700]/30 mb-6 overflow-x-auto pb-1">
               <button
                 onClick={() => setActiveTab('all')}
-                className={`px-4 py-2 font-medium ${
+                className={`px-4 py-2 font-medium flex items-center rounded-t-lg transition-all ${
                   activeTab === 'all'
-                    ? 'border-b-2 border-[#800000] text-[#800000]'
-                    : 'text-gray-500 hover:text-[#800000]'
+                    ? 'border-b-2 border-[#800000] text-[#800000] bg-[#FFD700]/10'
+                    : 'text-[#800000]/70 hover:text-[#800000] hover:bg-[#FFD700]/5'
                 }`}
               >
+                <Filter size={16} className="mr-2" />
                 All Reviews
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-[#800000]/10 text-[#800000]">
+                  {reviews.length + receivedReviews.length}
+                </span>
               </button>
               <button
                 onClick={() => setActiveTab('received')}
-                className={`px-4 py-2 font-medium ${
+                className={`px-4 py-2 font-medium flex items-center rounded-t-lg transition-all ${
                   activeTab === 'received'
-                    ? 'border-b-2 border-[#800000] text-[#800000]'
-                    : 'text-gray-500 hover:text-[#800000]'
+                    ? 'border-b-2 border-[#800000] text-[#800000] bg-[#FFD700]/10'
+                    : 'text-[#800000]/70 hover:text-[#800000] hover:bg-[#FFD700]/5'
                 }`}
               >
-                Reviews Received ({receivedReviews.length})
+                <UserCheck size={16} className="mr-2" />
+                Reviews Received
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-[#800000]/10 text-[#800000]">
+                  {receivedReviews.length}
+                </span>
               </button>
               <button
                 onClick={() => setActiveTab('submitted')}
-                className={`px-4 py-2 font-medium ${
+                className={`px-4 py-2 font-medium flex items-center rounded-t-lg transition-all ${
                   activeTab === 'submitted'
-                    ? 'border-b-2 border-[#800000] text-[#800000]'
-                    : 'text-gray-500 hover:text-[#800000]'
+                    ? 'border-b-2 border-[#800000] text-[#800000] bg-[#FFD700]/10'
+                    : 'text-[#800000]/70 hover:text-[#800000] hover:bg-[#FFD700]/5'
                 }`}
               >
-                Reviews Submitted ({reviews.length})
+                <Star size={16} className="mr-2" fill={activeTab === 'submitted' ? "#FFD700" : "none"} />
+                Reviews Submitted
+                <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-[#800000]/10 text-[#800000]">
+                  {reviews.length}
+                </span>
               </button>
             </div>
             
             {/* Reviews List */}
             {filteredReviews.length === 0 ? (
-              <div className="text-center py-10">
-                <Star size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500">No reviews found in this category.</p>
+              <div className="text-center py-12 bg-[#f8f5f0] rounded-lg border border-dashed border-[#FFD700]/30">
+                <div className="w-16 h-16 mx-auto bg-[#800000]/10 rounded-full flex items-center justify-center mb-4">
+                  <Star size={32} className="text-[#FFD700]" fill="#FFD700" />
+                </div>
+                <p className="text-[#800000]/80 font-medium">No reviews found in this category.</p>
+                <p className="text-[#800000]/60 mt-1 mb-4">Reviews will appear here after you complete transactions.</p>
                 <button
                   onClick={() => navigate('/transaction-history')}
-                  className="mt-4 px-4 py-2 bg-[#800000] text-white rounded-md hover:bg-opacity-90 transition-all"
+                  className="mt-4 inline-block py-2 px-6 bg-[#800000] text-[#FFD700] rounded-full shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
                 >
                   View Transaction History
                 </button>
               </div>
             ) : (
               <div className="space-y-6">
-                {filteredReviews.map((review) => (
+                {filteredReviews.map((review, index) => (
                   <div 
                     key={review.ReviewId || review.id} 
-                    className={`p-5 rounded-lg shadow-md hover:shadow-lg transition-all border-l-4 
+                    className={`p-5 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 border-l-4 
                       ${review.reviewType === 'received' 
-                        ? 'bg-blue-50 border-blue-500' 
-                        : 'bg-green-50 border-green-500'}`}
+                        ? 'bg-[#f8f5f0] border-[#800000]' 
+                        : 'bg-[#f8f5f0] border-[#FFD700]'}`}
+                    style={{animationDelay: `${index * 100}ms`}}
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-semibold text-lg text-gray-800">
+                        <h3 className="font-semibold text-lg text-[#800000]">
                           {review.ServiceTitle || review.serviceTitle || 'Service'}
                         </h3>
                         
-                        <div className="mt-2 flex items-center">
+                        <div className="mt-2 flex items-center flex-wrap gap-2">
                           <span 
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium mr-3
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
                               ${review.reviewType === 'received' 
-                                ? 'bg-blue-100 text-blue-800' 
-                                : 'bg-green-100 text-green-800'}`}
+                                ? 'bg-[#800000]/10 text-[#800000]' 
+                                : 'bg-[#FFD700]/20 text-[#800000]'}`}
                           >
-                            {review.reviewType === 'received' ? 'Review Received' : 'Review Submitted'}
+                            {review.reviewType === 'received' ? (
+                              <>
+                                <UserCheck size={14} className="mr-1.5" />
+                                Review Received
+                              </>
+                            ) : (
+                              <>
+                                <Star size={14} className="mr-1.5" fill="#FFD700" />
+                                Review Submitted
+                              </>
+                            )}
                           </span>
                           
-                          <p className="text-sm text-gray-700">
+                          <p className="text-sm text-[#800000]/80">
                             {review.displayText}
                           </p>
                         </div>
                         
                         <div className="mt-3 flex items-center">
                           {renderRatingStars(review.Rating || review.rating)}
-                          <span className="ml-2 text-sm text-gray-600">
+                          <span className="ml-2 text-sm text-[#800000]/70 font-medium">
                             {review.Rating || review.rating}/5
                           </span>
                         </div>
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-[#800000]/60 bg-white px-3 py-1 rounded-full shadow-sm border border-[#FFD700]/20 flex items-center">
+                        <Clock size={14} className="mr-1.5 text-[#800000]/70" />
                         {formatDate(review.CreatedAt || review.createdAt)}
                       </div>
                     </div>
                     
                     {(review.ReviewText || review.reviewText) && (
-                      <div className="mt-3 text-gray-700 bg-white p-4 rounded-md border border-gray-100">
+                      <div className="mt-4 text-[#800000]/80 bg-white p-4 rounded-lg border border-[#FFD700]/20 shadow-sm italic">
                         "{review.ReviewText || review.reviewText}"
                       </div>
                     )}
                     
-                    <div className="mt-3 text-xs text-gray-500">
-                      Transaction #{review.ApplicationId || review.applicationId}
+                    <div className="mt-3 flex justify-between items-center">
+                      <div className="text-xs text-[#800000]/60 bg-[#800000]/5 px-2 py-1 rounded">
+                        Transaction #{review.ApplicationId || review.applicationId}
+                      </div>
+                      
+                      {review.reviewType === 'received' && (
+                        <Link 
+                          to={`/transaction-history`}
+                          className="text-xs font-medium text-[#800000] hover:text-[#800000]/80 flex items-center"
+                        >
+                          View Transaction <ArrowLeft size={14} className="ml-1 transform rotate-180" />
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -294,5 +343,25 @@ const Reviews = () => {
     </div>
   );
 };
+
+// Add animation styles
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .space-y-6 > div {
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+`;
+document.head.appendChild(style);
 
 export default Reviews;

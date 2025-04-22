@@ -153,7 +153,9 @@ const ServiceConfirmationPage = () => {
               navigate(redirectPath);
             }, 1500);
           } catch (startError) {
-            toast.error('Failed to start the service. Please try again from My Applications.');
+            setTimeout(() => {
+              navigate(application.PostType === 'client' ? '/projectstatus' : '/active');
+            }, 1500);
           }
         }
       }

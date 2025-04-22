@@ -21,6 +21,10 @@ router.get('/:applicationId', verifyToken, async (req, res) => {
         SELECT t.*, 
                s.Title as ServiceTitle, s.Price as ServicePrice, s.PostType,
                a.UserId as ApplicantId, s.SellerId as ServiceOwnerId,
+               -- IMPORTANT: The naming below is based on ownership, NOT role
+               -- 'client' is the service owner (which is actually the freelancer in freelancer services)
+               -- 'freelancer' is the applicant (which is actually the client in freelancer services)
+               -- For freelancer services, these names are opposite to their actual roles
                client.FullName as ClientName, client.Email as ClientEmail,
                freelancer.FullName as FreelancerName, freelancer.Email as FreelancerEmail,
                ISNULL(freelancer.GcashQR, '') as FreelancerGcashQR,
@@ -44,18 +48,40 @@ router.get('/:applicationId', verifyToken, async (req, res) => {
     
     console.log('Transaction found:', JSON.stringify(transaction, null, 2));
 
-    // Determine if the current user can make payment
-    const isClient = transaction.ServiceOwnerId === userId;
-    const isFreelancer = transaction.ApplicantId === userId;
+    // Determine the correct roles based on post type
+    let isClient, canPay;
     
-    if (!isClient && !isFreelancer) {
+    if (transaction.PostType.toLowerCase() === 'freelancer') {
+      // For freelancer service posts:
+      // - The applicant (not the service owner) is the CLIENT
+      // - The service owner is the FREELANCER
+      // IMPORTANT: This means the "FreelancerName" in the database is actually the CLIENT
+      // and the "ClientName" is actually the FREELANCER for this post type
+      isClient = transaction.ApplicantId === userId;
+      
+      // Client (applicant) can pay for freelancer services
+      canPay = isClient && 
+              transaction.Status === 'Pending' && 
+              transaction.ApplicationStatus === 'Service Started';
+    } else {
+      // For client request posts:
+      // - The service owner is the CLIENT
+      // - The applicant is the FREELANCER
+      // Here the naming in the database matches the roles
+      isClient = transaction.ServiceOwnerId === userId;
+      
+      // Freelancer (applicant) can pay for client requests
+      canPay = !isClient && // Freelancer pays
+              transaction.Status === 'Pending' && 
+              transaction.ApplicationStatus === 'Service Started';
+    }
+    
+    const isFreelancer = !isClient;
+    
+    if (transaction.ApplicantId !== userId && transaction.ServiceOwnerId !== userId) {
       console.log('User not authorized to view this transaction');
       return res.status(403).json({ error: 'You are not authorized to view this transaction' });
     }
-
-    const canPay = isClient && 
-                  transaction.Status === 'Pending' && 
-                  transaction.ApplicationStatus === 'Service Started';
 
     // Format the response
     const response = {
@@ -64,22 +90,41 @@ router.get('/:applicationId', verifyToken, async (req, res) => {
       amount: transaction.ServicePrice,
       status: transaction.Status,
       postType: transaction.PostType,
-      payer: {
-        id: transaction.ServiceOwnerId,
-        name: transaction.ClientName,
-        email: transaction.ClientEmail
-      },
-      payee: {
-        id: transaction.ApplicantId,
-        name: transaction.FreelancerName,
-        email: transaction.FreelancerEmail
-      },
+      // For freelancer service posts, the client (applicant/payee) should be payer
+      // For client request posts, maintain existing logic where service owner is payer
+      payer: transaction.PostType.toLowerCase() === 'freelancer' ? 
+        {
+          id: transaction.ApplicantId,
+          name: transaction.FreelancerName,
+          email: transaction.FreelancerEmail
+        } : 
+        {
+          id: transaction.ServiceOwnerId,
+          name: transaction.ClientName,
+          email: transaction.ClientEmail
+        },
+      // Corresponding payee based on post type
+      payee: transaction.PostType.toLowerCase() === 'freelancer' ? 
+        {
+          id: transaction.ServiceOwnerId,
+          name: transaction.ClientName,
+          email: transaction.ClientEmail
+        } : 
+        {
+          id: transaction.ApplicantId,
+          name: transaction.FreelancerName,
+          email: transaction.FreelancerEmail
+        },
       canPay,
       isClient,
+      // Add explicit role labels to assist frontend
+      userRole: isClient ? 'client' : 'freelancer',
+      payerRole: transaction.PostType.toLowerCase() === 'freelancer' ? 'client' : 'freelancer',
+      payeeRole: transaction.PostType.toLowerCase() === 'freelancer' ? 'freelancer' : 'client',
       FreelancerGcashQR: transaction.FreelancerGcashQR
     };
 
-    console.log('Sending response:', JSON.stringify(response, null, 2));
+    console.log('Sending updated response with corrected roles:', JSON.stringify(response, null, 2));
     res.json(response);
 
   } catch (error) {

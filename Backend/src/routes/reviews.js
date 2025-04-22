@@ -10,7 +10,7 @@ router.post('/', verifyToken, async (req, res) => {
             return res.status(401).json({ error: 'Unauthorized - Please log in again' });
         }
         
-        const { applicationId, rating, reviewText, userRole } = req.body;
+        const { applicationId, rating, reviewText, userRole, revieweeId, revieweeRole, revieweeName } = req.body;
         const userId = req.user.userId;
         
         if (!applicationId) {
@@ -96,13 +96,19 @@ router.post('/', verifyToken, async (req, res) => {
             });
         }
         
+        // Get reviewee details from frontend or fallback to database
+        const actualRevieweeId = revieweeId || (userRole === 'client' ? transaction.ServiceOwnerId : transaction.ClientId);
+        const actualRevieweeName = revieweeName || (userRole === 'client' ? transaction.ServiceOwnerName : transaction.ClientName);
+        const actualRevieweeRole = revieweeRole || (userRole === 'client' ? 'freelancer' : 'client');
+        
         // Store additional metadata for the review
         const metadata = {
             reviewerId: userId,
             reviewerRole: userRole || 'client',
             reviewerName: userRole === 'client' ? transaction.ClientName : transaction.ServiceOwnerName,
-            revieweeName: userRole === 'client' ? transaction.ServiceOwnerName : transaction.ClientName,
-            revieweeId: userRole === 'client' ? transaction.ServiceOwnerId : transaction.ClientId,
+            revieweeName: actualRevieweeName,
+            revieweeId: actualRevieweeId,
+            revieweeRole: actualRevieweeRole,
             serviceTitle: transaction.ServiceTitle,
             timestamp: new Date().toISOString()
         };
@@ -160,6 +166,22 @@ router.post('/', verifyToken, async (req, res) => {
                 console.log(`Updated ReviewerId for review ${reviewId}`);
             }
             
+            // Check if RevieweeId column exists
+            const hasRevieweeIdColumn = await columnExists(pool, 'Reviews', 'RevieweeId');
+            
+            if (hasRevieweeIdColumn) {
+                // Update the RevieweeId if the column exists
+                await pool.request()
+                    .input('reviewId', sql.Int, reviewId)
+                    .input('revieweeId', sql.Int, actualRevieweeId)
+                    .query(`
+                        UPDATE Reviews
+                        SET RevieweeId = @revieweeId
+                        WHERE ReviewId = @reviewId
+                    `);
+                console.log(`Updated RevieweeId for review ${reviewId}`);
+            }
+            
             // Check if Metadata column exists
             const hasMetadataColumn = await columnExists(pool, 'Reviews', 'Metadata');
             
@@ -194,7 +216,8 @@ router.post('/', verifyToken, async (req, res) => {
                     s.Title as ServiceTitle,
                     '${metadata.reviewerName}' as ReviewerName,
                     '${metadata.revieweeName}' as RevieweeName,
-                    '${metadata.reviewerRole}' as ReviewerRole
+                    '${metadata.reviewerRole}' as ReviewerRole,
+                    '${metadata.revieweeRole}' as RevieweeRole
                 FROM Reviews r
                 JOIN Applications a ON r.ApplicationId = a.ApplicationId
                 JOIN Services s ON a.ServiceId = s.ServiceId
@@ -351,6 +374,143 @@ router.get('/user', verifyToken, async (req, res) => {
         res.json(result.recordset);
     } catch (error) {
         console.error('Error fetching user reviews:', error);
+        res.status(500).json({ 
+            error: 'Failed to fetch reviews', 
+            details: error.message 
+        });
+    }
+});
+
+// Get reviews where the current user is the reviewee 
+// IMPORTANT: This route must be defined BEFORE the '/:reviewId' route
+router.get('/received', verifyToken, async (req, res) => {
+    try {
+        if (!req.user || !req.user.userId) {
+            return res.status(401).json({ error: 'Unauthorized - Please log in again' });
+        }
+        
+        const userId = req.user.userId;
+        console.log(`Fetching received reviews for user ID: ${userId}`);
+        
+        const pool = await getPool();
+        
+        // Check for advanced columns to determine query strategy
+        const hasRevieweeIdColumn = await columnExists(pool, 'Reviews', 'RevieweeId');
+        const hasMetadataColumn = await columnExists(pool, 'Reviews', 'Metadata');
+        
+        console.log(`Database schema: hasRevieweeIdColumn=${hasRevieweeIdColumn}, hasMetadataColumn=${hasMetadataColumn}`);
+        
+        let query = '';
+        
+        if (hasRevieweeIdColumn) {
+            // If RevieweeId column exists, use it directly (most accurate)
+            console.log('Using RevieweeId-based query');
+            query = `
+                SELECT 
+                    r.ReviewId,
+                    r.ApplicationId,
+                    r.Rating,
+                    r.ReviewText,
+                    r.CreatedAt,
+                    s.Title as ServiceTitle,
+                    s.ServiceId,
+                    u_reviewer.UserId as ReviewerId,
+                    u_reviewer.FullName as ReviewerName,
+                    u_reviewee.UserId as RevieweeId,
+                    u_reviewee.FullName as RevieweeName
+                FROM Reviews r
+                JOIN Applications a ON r.ApplicationId = a.ApplicationId
+                JOIN Services s ON a.ServiceId = s.ServiceId
+                JOIN Users u_reviewer ON r.ReviewerId = u_reviewer.UserId
+                JOIN Users u_reviewee ON r.RevieweeId = u_reviewee.UserId
+                WHERE r.RevieweeId = @userId
+                ORDER BY r.CreatedAt DESC
+            `;
+            
+            const result = await pool.request()
+                .input('userId', sql.Int, userId)
+                .query(query);
+            
+            console.log(`Found ${result.recordset.length} reviews using RevieweeId query`);    
+            res.json(result.recordset);
+            
+        } else if (hasMetadataColumn) {
+            // If Metadata exists, query reviews where the revieweeId in metadata matches the user's ID
+            console.log('Using Metadata-based query');
+            query = `
+                SELECT 
+                    r.ReviewId,
+                    r.ApplicationId,
+                    r.Rating,
+                    r.ReviewText,
+                    r.CreatedAt,
+                    r.Metadata,
+                    s.Title as ServiceTitle,
+                    s.ServiceId
+                FROM Reviews r
+                JOIN Applications a ON r.ApplicationId = a.ApplicationId
+                JOIN Services s ON a.ServiceId = s.ServiceId
+                WHERE 
+                    r.Metadata LIKE '%"revieweeId":' + CAST(@userId AS NVARCHAR(20)) + '%'
+                    OR r.Metadata LIKE '%"revieweeId": ' + CAST(@userId AS NVARCHAR(20)) + '%'
+                ORDER BY r.CreatedAt DESC
+            `;
+            
+            const result = await pool.request()
+                .input('userId', sql.Int, userId)
+                .query(query);
+            
+            console.log(`Found ${result.recordset.length} reviews using Metadata query`);
+                
+            // Process metadata to extract reviewer information
+            const processedResults = result.recordset.map(review => {
+                try {
+                    if (review.Metadata) {
+                        const metadata = JSON.parse(review.Metadata);
+                        review.ReviewerName = metadata.reviewerName;
+                        review.RevieweeName = metadata.revieweeName;
+                    }
+                } catch (err) {
+                    console.warn('Failed to parse review metadata:', err.message);
+                }
+                return review;
+            });
+            
+            res.json(processedResults);
+            
+        } else {
+            // Fallback to old query - this is less accurate as it assumes all reviews for seller's services are reviews for the seller
+            console.log('Using fallback seller-based query');
+            query = `
+                SELECT 
+                    r.ReviewId,
+                    r.ApplicationId,
+                    r.Rating,
+                    r.ReviewText,
+                    r.CreatedAt,
+                    s.Title as ServiceTitle,
+                    s.ServiceId,
+                    c.FullName as ReviewerName,
+                    so.FullName as RevieweeName
+                FROM Reviews r
+                JOIN Applications a ON r.ApplicationId = a.ApplicationId
+                JOIN Services s ON a.ServiceId = s.ServiceId
+                JOIN Users c ON a.UserId = c.UserId
+                JOIN Users so ON s.SellerId = so.UserId
+                WHERE s.SellerId = @userId
+                ORDER BY r.CreatedAt DESC
+            `;
+            
+            const result = await pool.request()
+                .input('userId', sql.Int, userId)
+                .query(query);
+            
+            console.log(`Found ${result.recordset.length} reviews using seller fallback query`);    
+            res.json(result.recordset);
+        }
+        
+    } catch (error) {
+        console.error('Error fetching received reviews:', error);
         res.status(500).json({ 
             error: 'Failed to fetch reviews', 
             details: error.message 

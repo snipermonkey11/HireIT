@@ -372,27 +372,61 @@ const Profile = () => {
               </div>
 
               {/* Payment Settings Section */}
-              <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6">
-                <div className="p-6 bg-gradient-to-r from-blue-500 to-blue-600">
-                  <h3 className="text-xl font-bold text-white flex items-center">
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6 border border-[#ffd700]/20">
+                <div className="p-6 bg-gradient-to-r from-[#800000] to-[#9a0000]">
+                  <h3 className="text-xl font-bold text-[#ffd700] flex items-center">
                     <QrCode className="h-6 w-6 mr-2" />
                     Payment Settings
                   </h3>
-                  <p className="text-blue-100 text-sm mt-1">Set up your payment information for freelance work</p>
+                  <p className="text-white/80 text-sm mt-1">Set up your payment information for freelance work</p>
                 </div>
                 
                 <div className="p-6">
                   <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-700 mb-3">GCash QR Code</h4>
-                    <p className="text-gray-600 mb-4">
-                      Upload your GCash QR code to allow clients to pay you directly through GCash. 
-                      This QR code will be shown to clients when they choose to pay via GCash.
-                    </p>
+                    <h4 className="text-lg font-semibold text-[#800000] mb-3 border-b-2 border-[#ffd700]/50 pb-2">GCash QR Code</h4>
+                    
+                    {/* Steps Indicator */}
+                    <div className="flex items-center space-x-2 mb-4">
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#800000] text-white text-xs font-bold">1</div>
+                      <div className="h-0.5 w-8 bg-[#800000]"></div>
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#800000] text-white text-xs font-bold">2</div>
+                      <div className="h-0.5 w-8 bg-[#800000]"></div>
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#800000] text-white text-xs font-bold">3</div>
+                      <div className="ml-2 text-sm text-[#800000] font-medium">Easy Setup</div>
+                    </div>
+                    
+                    <div className="bg-[#ffd700]/5 p-4 rounded-lg border border-[#ffd700]/20 mb-6">
+                      <p className="text-gray-700">
+                        Upload your GCash QR code to allow clients to pay you directly through GCash. 
+                        This QR code will be shown to clients when they choose to pay via GCash.
+                      </p>
+                      
+                      <div className="flex flex-wrap gap-4 mt-3">
+                        <div className="flex items-center text-sm text-[#800000]">
+                          <div className="w-4 h-4 rounded-full bg-[#800000] flex items-center justify-center mr-2">
+                            <span className="text-white text-xs">1</span>
+                          </div>
+                          <span>Open GCash app</span>
+                        </div>
+                        <div className="flex items-center text-sm text-[#800000]">
+                          <div className="w-4 h-4 rounded-full bg-[#800000] flex items-center justify-center mr-2">
+                            <span className="text-white text-xs">2</span>
+                          </div>
+                          <span>Go to Profile → QR Code</span>
+                        </div>
+                        <div className="flex items-center text-sm text-[#800000]">
+                          <div className="w-4 h-4 rounded-full bg-[#800000] flex items-center justify-center mr-2">
+                            <span className="text-white text-xs">3</span>
+                          </div>
+                          <span>Save QR image & upload here</span>
+                        </div>
+                      </div>
+                    </div>
                     
                     <div className="flex flex-col sm:flex-row gap-6">
                       {/* QR Code Preview */}
                       <div className="sm:w-1/3 flex flex-col items-center">
-                        <div className="bg-gray-100 border rounded-lg w-40 h-40 flex items-center justify-center overflow-hidden mb-2">
+                        <div className="bg-gradient-to-br from-[#800000]/5 to-[#ffd700]/5 border-2 border-[#800000]/20 rounded-lg w-48 h-48 flex items-center justify-center overflow-hidden mb-2 p-3 shadow-inner">
                           {gcashQRPreview ? (
                             <img 
                               src={gcashQRPreview} 
@@ -406,23 +440,38 @@ const Profile = () => {
                               className="w-full h-full object-contain"
                             />
                           ) : (
-                            <div className="text-center p-4">
-                              <QrCode className="h-10 w-10 mx-auto text-gray-400 mb-2" />
-                              <p className="text-xs text-gray-500">No QR code uploaded</p>
+                            <div className="text-center p-4 flex flex-col items-center">
+                              <QrCode className="h-16 w-16 text-[#800000]/30 mb-2" />
+                              <p className="text-sm text-[#800000]/70">No QR code uploaded</p>
                             </div>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 text-center">
-                          {gcashQRPreview || profile.gcashQr ? 'QR code preview' : 'Upload your GCash QR code'}
-                        </p>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-500 mb-1">
+                            {gcashQRPreview || profile.gcashQr ? 'QR code preview' : 'Upload your GCash QR code'}
+                          </p>
+                          {(gcashQRPreview || profile.gcashQr) && (
+                            <span className="inline-flex items-center text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Ready for payments
+                            </span>
+                          )}
+                        </div>
                       </div>
                       
                       {/* Upload Controls */}
                       <div className="sm:w-2/3">
-                        <div className="mb-4">
-                          <label htmlFor="qrUpload" className="block text-sm font-medium text-gray-700 mb-1">
-                            Upload QR Code Image
-                          </label>
+                        <div className="mb-4 bg-gray-50 p-4 rounded-lg">
+                          <div className="flex items-center mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 10-2 0v1.586l-.293-.293a1 1 0 10-1.414 1.414l2 2a1 1 0 001.414 0l2-2a1 1 0 00-1.414-1.414l-.293.293V9z" clipRule="evenodd" />
+                            </svg>
+                            <label htmlFor="qrUpload" className="block text-sm font-medium text-[#800000]">
+                              Upload QR Code Image
+                            </label>
+                          </div>
                           <input
                             type="file"
                             id="qrUpload"
@@ -431,8 +480,8 @@ const Profile = () => {
                             className="block w-full text-sm text-gray-500 
                                       file:mr-4 file:py-2 file:px-4 file:rounded-md
                                       file:border-0 file:text-sm file:font-semibold
-                                      file:bg-blue-50 file:text-blue-700
-                                      hover:file:bg-blue-100"
+                                      file:bg-[#800000] file:text-[#ffd700]
+                                      hover:file:bg-[#9a0000] transition-all duration-300"
                           />
                           <p className="mt-1 text-xs text-gray-500">
                             Upload a clear image of your GCash QR code. Supported formats: PNG, JPG, JPEG.
@@ -442,32 +491,57 @@ const Profile = () => {
                         <button
                           onClick={saveGcashQR}
                           disabled={!gcashQR || updatingGcashQR}
-                          className={`w-full py-2 px-4 rounded-md text-sm font-medium
-                                    ${!gcashQR || updatingGcashQR ? 
-                                      'bg-gray-300 text-gray-500 cursor-not-allowed' : 
-                                      'bg-blue-600 text-white hover:bg-blue-700'}`}
+                          className={`w-full py-3 px-4 rounded-md text-sm font-medium shadow-md transition-all duration-300 flex items-center justify-center ${
+                            !gcashQR || updatingGcashQR ? 
+                            'bg-gray-300 text-gray-500 cursor-not-allowed' : 
+                            'bg-[#800000] text-[#ffd700] hover:bg-[#9a0000] transform hover:-translate-y-0.5'
+                          }`}
                         >
                           {updatingGcashQR ? (
                             <span className="flex items-center justify-center">
-                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-[#ffd700]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                               </svg>
                               Updating...
                             </span>
                           ) : (
-                            'Save QR Code'
+                            <span className="flex items-center justify-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                              </svg>
+                              Save QR Code
+                            </span>
                           )}
                         </button>
+                        
+                        <div className="mt-4 text-xs text-gray-500 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                          <div className="flex items-start">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500 mr-1 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                            <span>
+                              Once your QR code is saved, clients will see it as a payment option when booking your services.
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="border-t pt-4 text-sm text-gray-500">
-                    <p>
-                      <strong>Note:</strong> Your GCash QR code contains your account information. 
-                      Only upload a QR code for an account that you own and control.
-                    </p>
+                  <div className="bg-[#ffd700]/10 border border-[#ffd700]/30 rounded-lg p-4 mt-6">
+                    <div className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <div>
+                        <p className="text-sm text-[#800000] font-medium">Security Notice</p>
+                        <p className="text-sm text-[#800000] mt-1">
+                          Your GCash QR code contains your account information. 
+                          Only upload a QR code for an account that you own and control.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

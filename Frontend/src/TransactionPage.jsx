@@ -90,31 +90,74 @@ const TransactionPage = () => {
       if (response.data) {
         console.log('Transaction details:', response.data);
         
-        // Ensure we have a clean/consistent transaction object
-        const cleanedTransaction = {
-          ...response.data,
-          // Make sure user is only seen as a client on this page
-          isClient: true
-        };
+        // Get current user ID
+        const currentUserId = userData.userId;
         
-        setTransaction(cleanedTransaction);
+        // Determine if the current user is the client or freelancer based on post type
+        let isClient = false;
+        let isFreelancer = false;
         
-        // Check freelancer's GCash QR code
-        if (response.data.FreelancerGcashQR) {
-          console.log('Found freelancer GCash QR code, processing...');
-          const formattedQR = formatImageUrl(response.data.FreelancerGcashQR);
-          console.log('Formatted QR code URL:', formattedQR ? 'Successfully formatted' : 'Failed to format');
-          setQrCodeImage(formattedQR);
+        if (response.data.postType === 'freelancer') {
+          // For freelancer posts (service offer):
+          // - The poster (payee) is the freelancer 
+          // - The applicant (payer) is the client
+          isClient = currentUserId === response.data.payer?.id;
+          isFreelancer = currentUserId === response.data.payee?.id;
         } else {
-          console.log('No freelancer GCash QR code found in transaction data');
-          setQrCodeImage(null);
+          // For client posts (requesting service):
+          // - The poster (payer) is the client
+          // - The applicant (payee) is the freelancer
+          isClient = currentUserId === response.data.payer?.id;
+          isFreelancer = currentUserId === response.data.payee?.id;
         }
         
-        // Debug transaction data only
-        console.log('User ID:', userData.userId);
-        console.log('Transaction payer ID:', response.data.payer?.id);
-        console.log('Transaction payee ID:', response.data.payee?.id);
-        console.log('Is client according to API:', response.data.isClient);
+        console.log('Role determination:', {
+          currentUserId,
+          postType: response.data.postType,
+          payerId: response.data.payer?.id,
+          payeeId: response.data.payee?.id,
+          isClient,
+          isFreelancer
+        });
+        
+        // Set QR code - always show the freelancer's QR code to the client
+        let qrCodeToShow = null;
+        
+        // Only process QR code if the current user is the client (payer) to see freelancer's QR
+        if (isClient) {
+          // First, try to get the QR from the payee directly (for client posts)
+          if (response.data.payee?.qrCode) {
+            qrCodeToShow = response.data.payee.qrCode;
+          } 
+          // Then try to get the dedicated freelancer QR field (for freelancer posts)
+          else if (response.data.FreelancerGcashQR) {
+            qrCodeToShow = response.data.FreelancerGcashQR;
+          }
+        }
+        
+        console.log('QR Code selection:', {
+          isClient,
+          qrCodeFound: qrCodeToShow ? true : false,
+          qrSource: qrCodeToShow === response.data.payee?.qrCode ? 'From payee' : 
+                    qrCodeToShow === response.data.FreelancerGcashQR ? 'From FreelancerGcashQR' : 'None'
+        });
+        
+        // Set transaction with correct role info
+        const updatedTransaction = {
+          ...response.data,
+          isClient: isClient,
+          isFreelancer: isFreelancer
+        };
+        
+        setTransaction(updatedTransaction);
+        
+        // Format and set QR code if available
+        if (qrCodeToShow) {
+          const formattedQR = formatImageUrl(qrCodeToShow);
+          setQrCodeImage(formattedQR);
+        } else {
+          setQrCodeImage(null);
+        }
       }
     } catch (err) {
       console.error('Error fetching transaction details:', err);
@@ -219,20 +262,20 @@ const TransactionPage = () => {
       // Add notifications with correct roles
       const timestamp = new Date().toISOString();
       
-      // For client (payer) who is making the payment
+      // For client who is making the payment (always payer)
       addNotification(
-        `Payment sent for service "${transaction.serviceTitle}"`,
+        `Payment sent for ${transaction.postType === 'client' ? 'requested' : 'offered'} service "${transaction.serviceTitle}"`,
         "PAYMENT_SENT",
         timestamp,
-        transaction.payer.id // The client who sent payment
+        transaction.payer.id // Client's ID
       );
 
-      // For freelancer (payee) who receives payment
+      // For freelancer who receives payment (always payee)
       addNotification(
-        `New payment received for service "${transaction.serviceTitle}"`,
+        `New payment received for ${transaction.postType === 'client' ? 'requested' : 'offered'} service "${transaction.serviceTitle}"`,
         "PAYMENT_RECEIVED",
         timestamp,
-        transaction.payee.id // The freelancer who received payment
+        transaction.payee.id // Freelancer's ID
       );
 
       // Redirect to transaction history after successful payment
@@ -287,10 +330,10 @@ const TransactionPage = () => {
   if (error) {
     return (
       <div className="min-h-screen bg-[#f8f5f0] p-6 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full transform hover:scale-105 transition-all duration-500">
+        <div className="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full transform hover:scale-105 transition-all duration-500 border-t-4 border-[#800000]">
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 bg-[#800000] rounded-full flex items-center justify-center animate-pulse">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-[#FFD700]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
@@ -304,7 +347,7 @@ const TransactionPage = () => {
   if (!transaction) {
     return (
       <div className="min-h-screen bg-[#f8f5f0] p-6 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full text-center">
+        <div className="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full text-center border-t-4 border-[#800000]">
           <p className="text-lg text-[#800000] font-semibold">No transaction found</p>
         </div>
       </div>
@@ -332,23 +375,31 @@ const TransactionPage = () => {
         {/* Transaction Card */}
         <div className="bg-white rounded-b-2xl shadow-xl p-8">
           {/* Client Indicator */}
-          <div className="mb-6 p-4 bg-[#800000] bg-opacity-10 rounded-lg border border-[#800000] border-opacity-20">
-            <p className="font-semibold text-[#800000]">You are the client making the payment</p>
+          <div className="mb-6 p-4 bg-[#FFF9E6] rounded-lg border border-[#FFD700]/40">
+            {transaction.isClient ? (
+              <p className="font-semibold text-[#800000]">
+                You are the client making the payment for this {transaction.postType === 'client' ? 'requested service' : 'offered service'}
+              </p>
+            ) : (
+              <p className="font-semibold text-[#800000]">
+                You are the freelancer receiving payment for this {transaction.postType === 'client' ? 'requested service' : 'offered service'}
+              </p>
+            )}
           </div>
           
           {/* Service Details */}
           <div className="mb-8 pb-8 border-b border-gray-200">
             <h3 className="text-2xl font-bold text-[#800000] mb-4">{transaction.serviceTitle}</h3>
             <div className="flex items-center justify-between">
-              <div className="text-gray-600">
+              <div className="text-[#800000]/80">
                 <p className="mb-2">
                   <span className="font-semibold">Amount:</span> ₱{transaction.amount}
                 </p>
                 <p className="mb-2">
                   <span className="font-semibold">Status:</span>{' '}
                   <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                    transaction.status === 'Pending' ? 'bg-yellow-400 text-yellow-900' :
-                    transaction.status === 'Completed' ? 'bg-green-500 text-white' :
+                    transaction.status === 'Pending' ? 'bg-[#FFD700] text-[#800000]' :
+                    transaction.status === 'Completed' ? 'bg-[#800000] text-white' :
                     'bg-gray-500 text-white'
                   }`}>
                     {transaction.status}
@@ -357,8 +408,8 @@ const TransactionPage = () => {
                 <p>
                   <span className="font-semibold">Service Type:</span>{' '}
                   <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                    transaction.postType === 'client' ? 'bg-[#800000] bg-opacity-80' : 'bg-[#800000]'
-                  } text-white`}>
+                    transaction.postType === 'client' ? 'bg-[#800000]/80' : 'bg-[#800000]'
+                  } text-[#FFD700]`}>
                     {transaction.postType === 'client' ? 'Client Request' : 'Freelancer Service'}
                   </span>
                 </p>
@@ -371,23 +422,23 @@ const TransactionPage = () => {
             <h4 className="text-xl font-bold text-[#800000] mb-4">Payment Details</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Payer Details */}
-              <div className="bg-[#f8f5f0] p-6 rounded-xl">
+              <div className="bg-[#FFF9E6] p-6 rounded-xl border border-[#FFD700]/40">
                 <h5 className="font-semibold text-[#800000] mb-3">Payer Details (Client)</h5>
-                <p className="text-gray-700 mb-2">Name: {transaction.payer.name}</p>
-                <p className="text-gray-700">Email: {transaction.payer.email}</p>
+                <p className="text-[#800000]/80 mb-2"><span className="font-medium">Name:</span> {transaction.payer?.name}</p>
+                <p className="text-[#800000]/80"><span className="font-medium">Email:</span> {transaction.payer?.email}</p>
               </div>
 
               {/* Payee Details */}
-              <div className="bg-[#f8f5f0] p-6 rounded-xl">
+              <div className="bg-[#FFF9E6] p-6 rounded-xl border border-[#FFD700]/40">
                 <h5 className="font-semibold text-[#800000] mb-3">Payee Details (Freelancer)</h5>
-                <p className="text-gray-700 mb-2">Name: {transaction.payee.name}</p>
-                <p className="text-gray-700">Email: {transaction.payee.email}</p>
+                <p className="text-[#800000]/80 mb-2"><span className="font-medium">Name:</span> {transaction.payee?.name}</p>
+                <p className="text-[#800000]/80"><span className="font-medium">Email:</span> {transaction.payee?.email}</p>
               </div>
             </div>
           </div>
 
           {/* Payment Method Selection */}
-          {transaction.status === 'Pending' && !isPaymentSent && (
+          {transaction.status === 'Pending' && !isPaymentSent && transaction.isClient && (
             <div className="mb-8">
               <h4 className="text-xl font-bold text-[#800000] mb-4">Select Payment Method</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -395,18 +446,18 @@ const TransactionPage = () => {
                   onClick={() => handlePaymentMethod('Face to Face')}
                   className={`p-4 rounded-xl flex items-center border-2 transition-all ${
                     paymentMethod === 'Face to Face' 
-                      ? 'border-[#800000] bg-[#800000] bg-opacity-10' 
-                      : 'border-gray-200 hover:border-[#800000] hover:bg-[#800000] hover:bg-opacity-5'
+                      ? 'border-[#800000] bg-[#800000]/10' 
+                      : 'border-[#FFD700]/30 hover:border-[#800000] hover:bg-[#800000]/5'
                   }`}
                 >
                   <div className="w-10 h-10 bg-[#800000] rounded-full flex items-center justify-center mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#FFD700]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z" />
                     </svg>
                   </div>
                   <div>
                     <p className="font-bold text-[#800000]">Face to Face</p>
-                    <p className="text-sm text-gray-600">Meet with the freelancer in person</p>
+                    <p className="text-sm text-[#800000]/70">Meet with the freelancer in person</p>
                   </div>
                 </button>
                 
@@ -414,18 +465,18 @@ const TransactionPage = () => {
                   onClick={() => handlePaymentMethod('GCash')}
                   className={`p-4 rounded-xl flex items-center border-2 transition-all ${
                     paymentMethod === 'GCash' 
-                      ? 'border-[#800000] bg-[#800000] bg-opacity-10' 
-                      : 'border-gray-200 hover:border-[#800000] hover:bg-[#800000] hover:bg-opacity-5'
+                      ? 'border-[#800000] bg-[#800000]/10' 
+                      : 'border-[#FFD700]/30 hover:border-[#800000] hover:bg-[#800000]/5'
                   }`}
                 >
-                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="w-10 h-10 bg-[#800000] rounded-full flex items-center justify-center mr-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#FFD700]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                   </div>
                   <div>
                     <p className="font-bold text-[#800000]">GCash</p>
-                    <p className="text-sm text-gray-600">Pay using GCash mobile wallet</p>
+                    <p className="text-sm text-[#800000]/70">Pay using GCash mobile wallet</p>
                   </div>
                 </button>
               </div>
@@ -434,20 +485,22 @@ const TransactionPage = () => {
 
           {/* GCash QR Code - Show when selected */}
           {paymentMethod === 'GCash' && (
-            <div className="mb-8 bg-blue-50 p-6 rounded-xl border border-blue-200">
-              <h4 className="text-xl font-bold text-blue-800 mb-4 flex items-center">
+            <div className="mb-8 bg-[#FFF9E6] p-6 rounded-xl border border-[#FFD700]/30">
+              <h4 className="text-xl font-bold text-[#800000] mb-4 flex items-center">
                 <img src={gcashLogo} alt="GCash" className="h-6 mr-2" />
                 GCash Payment
               </h4>
               
               <div className="flex flex-col md:flex-row items-center gap-8">
                 <div className="md:w-1/2 flex flex-col items-center">
-                  <p className="text-blue-800 mb-4 text-center font-semibold">Scan the QR code below to pay the freelancer directly</p>
-                  <div className="bg-white p-4 rounded-xl shadow-md mb-4">
+                  <p className="text-[#800000] mb-4 text-center font-semibold">
+                    Scan the QR code below to make payment
+                  </p>
+                  <div className="bg-white p-4 rounded-xl shadow-md mb-4 border-2 border-[#800000]/10">
                     {qrCodeImage ? (
                       <img 
                         src={qrCodeImage} 
-                        alt="Freelancer's GCash QR" 
+                        alt="GCash QR Code"
                         className="w-full max-w-[250px] h-auto"
                         onError={(e) => {
                           console.error("QR image loading error");
@@ -457,46 +510,46 @@ const TransactionPage = () => {
                       />
                     ) : (
                       <div className="w-[250px] h-[250px] flex flex-col items-center justify-center bg-gray-100 rounded">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-[#800000] mb-2 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
-                        <p className="text-gray-500 text-center">
-                          The freelancer has not uploaded a GCash QR code.
+                        <p className="text-[#800000] text-center">
+                          No QR code available.
                           <br />
                           Please use Face to Face payment instead.
                         </p>
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-gray-600 text-center">
+                  <p className="text-xs text-[#800000]/70 text-center">
                     {qrCodeImage 
-                      ? "This QR code is linked to the freelancer's GCash account" 
-                      : "No QR code available. Please contact the freelancer."}
+                      ? "This QR code is linked to the recipient's GCash account" 
+                      : "No QR code available. Please choose a different payment method."}
                   </p>
                 </div>
                 
                 <div className="md:w-1/2">
                   <div className="mb-4">
-                    <label className="block text-gray-700 font-semibold mb-2">Amount to Pay</label>
-                    <div className="p-3 bg-white rounded-lg border border-gray-300 font-bold text-xl">
+                    <label className="block text-[#800000] font-semibold mb-2">Amount to Pay</label>
+                    <div className="p-3 bg-white rounded-lg border-2 border-[#FFD700]/30 font-bold text-xl text-[#800000]">
                       ₱{transaction.amount}
                     </div>
                   </div>
                   
                   <div className="mb-6">
-                    <label className="block text-gray-700 font-semibold mb-2">Enter Reference Number</label>
+                    <label className="block text-[#800000] font-semibold mb-2">Enter Reference Number</label>
                     <input
                       type="text"
                       value={gcashReference}
                       onChange={handleGcashReferenceChange}
                       placeholder="e.g. GC12345678"
-                      className="w-full p-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className="w-full p-3 rounded-lg border-2 border-[#FFD700]/30 focus:border-[#800000] focus:ring-1 focus:ring-[#800000]"
                       disabled={!qrCodeImage}
                     />
-                    <p className="text-xs text-gray-500 mt-1">Enter the reference number you received from GCash after payment</p>
+                    <p className="text-xs text-[#800000]/70 mt-1">Enter the reference number you received from GCash after payment</p>
                   </div>
                   
-                  <ol className="list-decimal list-inside text-gray-700 space-y-2 mb-4 text-sm">
+                  <ol className="list-decimal list-inside text-[#800000]/80 space-y-2 mb-4 text-sm">
                     <li>Open your GCash app and scan the QR code</li>
                     <li>Pay the exact amount shown</li>
                     <li>Copy the reference number from GCash</li>
@@ -509,7 +562,7 @@ const TransactionPage = () => {
           )}
 
           {/* Payment Button */}
-          {transaction.status === 'Pending' && paymentMethod && !isPaymentSent && (
+          {transaction.status === 'Pending' && paymentMethod && !isPaymentSent && transaction.isClient && (
             <div className="flex justify-center mt-8">
               <button
                 onClick={handlePaymentSent}
@@ -517,12 +570,12 @@ const TransactionPage = () => {
                   (paymentMethod === 'GCash' && !gcashReference) || 
                   (paymentMethod === 'GCash' && !qrCodeImage)}
                 className="py-3 px-8 bg-[#800000] text-white rounded-full font-bold 
-                         hover:bg-opacity-90 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#800000] focus:ring-opacity-50
-                         disabled:opacity-50 disabled:cursor-not-allowed"
+                         hover:bg-[#800000]/90 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#FFD700] focus:ring-opacity-50
+                         disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
                 {submitting ? (
                   <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-[#FFD700]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -537,31 +590,65 @@ const TransactionPage = () => {
 
           {/* Success Message */}
           {isPaymentSent && (
-            <div className="bg-green-50 p-6 rounded-xl border border-green-200 mt-8">
+            <div className="bg-[#FFF9E6] p-6 rounded-xl border border-[#FFD700]/30 mt-8">
               <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mr-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-12 h-12 bg-[#800000] rounded-full flex items-center justify-center mr-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#FFD700]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h4 className="text-xl font-bold text-green-800">Payment Sent Successfully!</h4>
+                <h4 className="text-xl font-bold text-[#800000]">Payment Sent Successfully!</h4>
               </div>
-              <p className="text-green-700 mb-4">Your payment has been marked as sent. The freelancer will be notified and will confirm receipt.</p>
-              <p className="text-sm text-green-600">You will be redirected to your transaction history shortly...</p>
+              <p className="text-[#800000]/80 mb-4">Your payment has been marked as sent. The freelancer will be notified and will confirm receipt.</p>
+              <p className="text-sm text-[#800000]/70">You will be redirected to your transaction history shortly...</p>
             </div>
           )}
 
           {/* Payment Instructions */}
-          {transaction.status === 'Pending' && !paymentMethod && (
-            <div className="mt-8 p-6 bg-yellow-50 rounded-xl border border-yellow-200">
-              <h5 className="font-bold text-yellow-800 mb-3">Payment Instructions</h5>
-              <ol className="list-decimal list-inside text-yellow-800 space-y-2">
+          {transaction.status === 'Pending' && !paymentMethod && transaction.isClient && (
+            <div className="mt-8 p-6 bg-[#FFF9E6] rounded-xl border border-[#FFD700]/30">
+              <h5 className="font-bold text-[#800000] mb-3">Payment Instructions</h5>
+              <ol className="list-decimal list-inside text-[#800000]/80 space-y-2">
                 <li>Review the payment details above carefully</li>
                 <li>Select your preferred payment method</li>
                 <li>Follow the instructions for your selected payment method</li>
                 <li>Confirm your payment when ready</li>
                 <li>Wait for confirmation before closing this page</li>
               </ol>
+            </div>
+          )}
+          
+          {/* Freelancer Waiting Message */}
+          {transaction.status === 'Pending' && transaction.isFreelancer && (
+            <div className="mt-8 p-6 bg-[#FFF9E6] rounded-xl border border-[#FFD700]/30">
+              <h5 className="font-bold text-[#800000] mb-3">Payment Status</h5>
+              <div className="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#800000] mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-[#800000]/80">
+                  Waiting for client to make payment. You'll receive a notification once payment is sent.
+                </p>
+              </div>
+              
+              {qrCodeImage && (
+                <div className="mt-4 p-4 bg-white rounded-lg border-2 border-[#FFD700]/30">
+                  <p className="text-[#800000] font-medium mb-2">Your GCash QR code is set up for this transaction:</p>
+                  <div className="flex justify-center">
+                    <img 
+                      src={qrCodeImage} 
+                      alt="Your GCash QR Code"
+                      className="w-24 h-24 object-contain border border-[#800000]/10 p-1 rounded"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {!qrCodeImage && (
+                <div className="mt-4 p-4 bg-white rounded-lg border-2 border-[#FFD700]/30">
+                  <p className="text-[#800000] font-medium">You don't have a GCash QR code set up. The client will be limited to Face to Face payment.</p>
+                </div>
+              )}
             </div>
           )}
         </div>

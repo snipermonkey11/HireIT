@@ -409,16 +409,19 @@ const MyApplications = () => {
                 style={{animationDelay: `${index * 0.1}s`}}
               >
                 {/* Card Header with Status Indicator - Updated with Role Badge */}
-                <div className={`relative h-40 ${application.PostType === 'client'
-                  ? 'bg-gradient-to-r from-[#3b82f6] to-[#1e40af]' 
-                  : 'bg-gradient-to-r from-[#9b2226] to-[#ae2012]'}`}>
+                <div className={`relative h-40 bg-gradient-to-r from-[#800000]/90 to-[#9a0000]/80 overflow-hidden`}>
                   {application.Photo ? (
                     <img 
                       src={application.Photo}
                       alt={application.Title} 
-                      className="absolute inset-0 w-full h-full object-cover opacity-30"
+                      className="absolute inset-0 w-full h-full object-cover opacity-70"
                     />
-                  ) : null}
+                  ) : (
+                    <div className="absolute inset-0 opacity-15 bg-pattern">
+                      {/* Simple pattern overlay */}
+                      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMzLjMxIDAgNiAyLjY5IDYgNnMtMi42OSA2LTYgNi02LTIuNjktNi02IDIuNjktNiA2LTZ6TTEwIDhsMCAxMC0xMCAwIDAgLTEwIDEwIDB6TTMwIDQ4YzEuNjYgMCAzIDEuMzQgMyAzcy0xLjM0IDMtMyAzLTMtMS4zNC0zLTMgMS4zNC0zIDMtM3oiIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIi8+PC9nPjwvc3ZnPg==')] opacity-50"></div>
+                    </div>
+                  )}
                   
                   <div className="absolute inset-0 flex flex-col justify-end p-6">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -426,31 +429,23 @@ const MyApplications = () => {
                         {application.Status}
                       </span>
                       {/* Post Type Label */}
-                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                        application.PostType === 'client' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-[#ffd700] text-[#800000]'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold bg-[#ffd700]/90 text-[#800000] shadow-sm`}>
                         {application.PostType === 'client' ? '👥 Client Need' : '💼 Freelancer Service'}
                       </span>
                       {/* Your Role Badge - NEW */}
-                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                        userRole === 'freelancer' 
-                          ? 'bg-[#800000] text-white' 
-                          : 'bg-blue-500 text-white'
-                      }`}>
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold bg-[#800000] text-[#ffd700] shadow-sm`}>
                         You as {userRole === 'freelancer' ? 'Freelancer' : 'Client'}
                       </span>
                     </div>
-                    <h3 className="text-2xl font-bold text-white tracking-wide">{application.Title}</h3>
-                    <p className="text-[#ffd700] font-medium mt-1">₱{application.Price}</p>
+                    <h3 className="text-2xl font-bold text-white tracking-wide text-shadow">{application.Title}</h3>
+                    <p className="text-[#ffd700] font-medium mt-1 text-shadow">₱{application.Price}</p>
                   </div>
                 </div>
 
                 {/* Card Body */}
                 <div className="p-6">
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <h4 className="text-sm font-semibold text-gray-500 mb-2">Application Message:</h4>
+                  <div className="mb-4 pb-4 border-b border-[#ffd700]/30">
+                    <h4 className="text-sm font-semibold text-[#800000] mb-2">Application Message:</h4>
                     <p className="text-gray-700">{application.Message}</p>
                   </div>
                   
@@ -460,7 +455,7 @@ const MyApplications = () => {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <span className="font-medium">Applied on:</span>
+                      <span className="font-medium text-[#800000]">Applied on:</span>
                       <span className="ml-2">{formatDate(application.CreatedAt)}</span>
                     </div>
                     
@@ -468,7 +463,7 @@ const MyApplications = () => {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      <span className="font-medium">
+                      <span className="font-medium text-[#800000]">
                         {userRole === 'freelancer' 
                           ? 'Client:' 
                           : 'Freelancer:'}
@@ -480,7 +475,7 @@ const MyApplications = () => {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#800000] mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                       </svg>
-                      <span className="font-medium">Category:</span>
+                      <span className="font-medium text-[#800000]">Category:</span>
                       <span className="ml-2">{application.Category}</span>
                     </div>
                   </div>
@@ -490,9 +485,9 @@ const MyApplications = () => {
                     {(application.Status?.toLowerCase() === 'approved' || application.Status?.toLowerCase() === 'accepted' || application.Status === 'Accepted') && (
                       <button
                         onClick={() => handleStartService(application.ApplicationId)}
-                        className="py-2 px-4 bg-[#ffd700] text-[#800000] rounded-full font-bold 
-                                  hover:bg-[#ffcc00] transition-all duration-300 shadow-md hover:shadow-xl
-                                  transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#800000]
+                        className="py-2 px-4 bg-[#800000] text-[#ffd700] rounded-full font-bold 
+                                  hover:bg-[#9a0000] transition-all duration-300 shadow-md hover:shadow-xl
+                                  transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#ffd700]
                                   flex-1"
                       >
                         {userRole === 'freelancer' 
@@ -506,9 +501,9 @@ const MyApplications = () => {
                         {application.canUploadProof && (
                           <button
                             onClick={() => navigate(`/upload-proof/${application.ApplicationId}`)}
-                            className="py-2 px-4 bg-blue-600 text-white rounded-full font-bold 
-                                    hover:bg-blue-700 transition-all duration-300 shadow-md hover:shadow-xl
-                                    transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-blue-500
+                            className="py-2 px-4 bg-[#800000] text-[#ffd700] rounded-full font-bold 
+                                    hover:bg-[#9a0000] transition-all duration-300 shadow-md hover:shadow-xl
+                                    transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#ffd700]
                                     flex-1"
                           >
                             {userRole === 'freelancer' ? 'Upload Project Delivery' : 'Upload Service Proof'}
@@ -517,9 +512,9 @@ const MyApplications = () => {
                         {application.canMarkComplete && (
                           <button
                             onClick={() => navigate(`/mark-complete/${application.ApplicationId}`)}
-                            className="py-2 px-4 bg-purple-600 text-white rounded-full font-bold 
-                                    hover:bg-purple-700 transition-all duration-300 shadow-md hover:shadow-xl
-                                    transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-purple-500
+                            className="py-2 px-4 bg-[#800000] text-[#ffd700] rounded-full font-bold 
+                                    hover:bg-[#9a0000] transition-all duration-300 shadow-md hover:shadow-xl
+                                    transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#ffd700]
                                     flex-1"
                           >
                             {userRole === 'freelancer' ? 'Mark Project Complete' : 'Approve Service'}
@@ -532,14 +527,14 @@ const MyApplications = () => {
                       <button
                         onClick={() => handleDelete(application.ApplicationId)}
                         disabled={deletingId === application.ApplicationId}
-                        className="py-2 px-4 bg-[#800000] text-white rounded-full font-bold
-                                hover:bg-[#600000] transition-all duration-300 shadow-md hover:shadow-xl
+                        className="py-2 px-4 bg-[#800000] text-[#ffd700] rounded-full font-bold
+                                hover:bg-[#9a0000] transition-all duration-300 shadow-md hover:shadow-xl
                                 transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#ffd700]
                                 disabled:opacity-50 disabled:cursor-not-allowed flex-1"
                       >
                         {deletingId === application.ApplicationId ? 
                           <span className="flex items-center justify-center">
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-[#ffd700]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>

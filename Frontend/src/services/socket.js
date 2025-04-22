@@ -1,12 +1,17 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3000';
+// Get the API URL from environment variables or use localhost as fallback
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 class SocketService {
   constructor() {
     this.socket = null;
     this.eventHandlers = {};
     this.connected = false;
+    this.connecting = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    this.userId = null;
     this.handlers = {
       new_message: [],
       message_sent: [],
@@ -21,10 +26,15 @@ class SocketService {
       application_update: [],
       service_update: []
     };
+    
+    // Bind methods to prevent 'this' issues
+    this.connect = this.connect.bind(this);
+    this.sendMessage = this.sendMessage.bind(this);
+    this._notifyHandlers = this._notifyHandlers.bind(this);
   }
 
   isConnected() {
-    return this.connected && this.socket && this.socket.connected;
+    return this.socket && this.socket.connected && this.connected;
   }
 
   connect(userData) {
@@ -33,66 +43,107 @@ class SocketService {
       return;
     }
 
+    if (this.connecting) {
+      console.log('Socket connection in progress');
+      return;
+    }
+
     try {
-      this.socket = io('http://localhost:3000', {
+      this.connecting = true;
+      this.userId = userData.userId;
+      
+      console.log(`Connecting to socket at ${SOCKET_URL}`);
+      
+      this.socket = io(SOCKET_URL, {
         auth: {
           token: userData.token
         },
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
         reconnection: true,
         reconnectionAttempts: 5,
-        reconnectionDelay: 1000
+        reconnectionDelay: 1000,
+        timeout: 10000
       });
 
       // Connection events
       this.socket.on('connect', () => {
-        console.log('Socket connected successfully');
+        console.log('Socket connected successfully', this.socket.id);
         this.connected = true;
+        this.connecting = false;
+        this.reconnectAttempts = 0;
         
         // Join user's room for direct notifications
         this.socket.emit('join_user_room', userData.userId);
+        
+        // Notify connect handlers
+        this._notifyHandlers('connect', { connected: true });
       });
 
       this.socket.on('connect_error', (error) => {
         console.error('Socket connection error:', error);
         this.connected = false;
+        this.connecting = false;
+        this.reconnectAttempts++;
+        
+        if (this.reconnectAttempts > this.maxReconnectAttempts) {
+          console.error(`Failed to connect after ${this.maxReconnectAttempts} attempts`);
+          this.socket.disconnect();
+        }
+        
+        this._notifyHandlers('error', { error: 'Connection failed', details: error });
       });
 
       this.socket.on('disconnect', (reason) => {
         console.log('Socket disconnected:', reason);
         this.connected = false;
+        this.connecting = false;
+        
+        // Try to reconnect if unexpected disconnect
+        if (reason === 'io server disconnect' || reason === 'transport close') {
+          console.log('Attempting to reconnect...');
+          setTimeout(() => {
+            if (!this.connected && !this.connecting) {
+              this.socket.connect();
+            }
+          }, 2000);
+        }
+        
+        this._notifyHandlers('disconnect', { reason });
       });
 
-      // Listen for events that trigger notifications
-      this.socket.on('new_message', (data) => {
-        this.triggerEvent('new_message', data);
-      });
-
-      this.socket.on('transaction_update', (data) => {
-        this.triggerEvent('transaction_update', data);
-      });
-
-      this.socket.on('application_update', (data) => {
-        this.triggerEvent('application_update', data);
-      });
-
-      this.socket.on('service_update', (data) => {
-        this.triggerEvent('service_update', data);
-      });
-
-      // Set up event listeners
+      // Set up event listeners for messages
       this.socket.on('new_message', (message) => {
         if (message && message.conversationId) {
-          console.log('New message received:', message);
-          this._notifyHandlers('new_message', message);
+          console.log('New message received via socket server:', message);
+          
+          // Force update for all UI subscribers
+          setTimeout(() => {
+            // Make a copy to ensure React detects the change
+            const messageCopy = {...message, _timestamp: Date.now()};
+            this._notifyHandlers('new_message', messageCopy);
+            
+            // Also notify on message_sent to ensure all handlers are called
+            if (message.senderId === this.userId) {
+              this._notifyHandlers('message_sent', messageCopy);
+            }
+          }, 0);
         } else {
           console.error('Received invalid message format:', message);
         }
       });
 
       this.socket.on('message_sent', (message) => {
-        console.log('Message sent confirmation:', message);
-        this._notifyHandlers('message_sent', message);
+        console.log('Message sent confirmation from server:', message);
+        
+        // Force update UI in two separate events for better React state updates
+        setTimeout(() => {
+          // Make a copy to ensure React detects the change
+          const messageCopy = {...message, _timestamp: Date.now()};
+          this._notifyHandlers('message_sent', messageCopy);
+          
+          // Also dispatch as new_message to ensure UI updates
+          this._notifyHandlers('new_message', messageCopy);
+        }, 0);
       });
 
       this.socket.on('messages_read', (data) => {
@@ -117,8 +168,27 @@ class SocketService {
         console.error('Socket error:', error);
         this._notifyHandlers('error', error);
       });
+      
+      // Listen for reconnect events
+      this.socket.io.on('reconnect', (attempt) => {
+        console.log(`Reconnected after ${attempt} attempts`);
+        this.connected = true;
+        this.connecting = false;
+        
+        // Rejoin user's room after reconnection
+        if (this.userId) {
+          this.socket.emit('join_user_room', this.userId);
+        }
+      });
+      
+      this.socket.io.on('reconnect_attempt', (attempt) => {
+        console.log(`Reconnection attempt ${attempt}`);
+      });
+      
     } catch (error) {
       console.error('Failed to initialize socket:', error);
+      this.connecting = false;
+      this._notifyHandlers('error', { error: 'Failed to initialize socket', details: error });
     }
   }
 
@@ -170,8 +240,14 @@ class SocketService {
   }
 
   sendMessage(conversationId, content) {
-    if (!this.socket || !this.connected) {
-      console.error('Cannot send message: Socket not connected');
+    if (!this.socket) {
+      console.error('Cannot send message: Socket not initialized');
+      return Promise.reject(new Error('Socket not initialized'));
+    }
+    
+    if (!this.connected) {
+      console.warn('Socket not connected, attempting to reconnect before sending');
+      this.socket.connect();
       return Promise.reject(new Error('Socket not connected'));
     }
 
@@ -189,6 +265,13 @@ class SocketService {
           clearTimeout(timeoutId);
           this.socket.off('message_sent', messageHandler);
           this.socket.off('error', errorHandler);
+          
+          // Important: trigger the new_message event for this message too
+          // This ensures the message appears in the UI without a refresh
+          setTimeout(() => {
+            this._notifyHandlers('new_message', message);
+          }, 100);
+          
           resolve(message);
         };
 
@@ -223,9 +306,21 @@ class SocketService {
           return;
         }
 
+        // Generate unique message ID to help track it
+        const clientMessageId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
         // Send the message with validated data
-        console.log('Sending message to server:', { conversationId: conversationIdNum, content });
-        this.socket.emit('send_message', { conversationId: conversationIdNum, content });
+        console.log('Sending message to server:', { 
+          conversationId: conversationIdNum, 
+          content,
+          clientMessageId
+        });
+        
+        this.socket.emit('send_message', { 
+          conversationId: conversationIdNum, 
+          content,
+          clientMessageId
+        });
       } catch (err) {
         console.error('Error in sendMessage:', err);
         reject(err);
@@ -290,6 +385,16 @@ class SocketService {
     this.socket.emit('stop_typing', { conversationId });
   }
 
+  once(event, handler) {
+    const onceHandler = (data) => {
+      // Remove after first execution
+      this.off(event, onceHandler);
+      handler(data);
+    };
+    
+    this.on(event, onceHandler);
+  }
+
   on(event, handler) {
     if (!this.handlers[event]) {
       console.error(`Unknown event: ${event}`);
@@ -317,6 +422,8 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
       this.connected = false;
+      this.connecting = false;
+      this.userId = null;
     }
   }
 

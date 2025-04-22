@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Send, User, Loader, Trash2, X, Check, CheckCheck } from 'lucide-react';
+import { ArrowLeft, Send, User, Loader, Trash2, X, Check, CheckCheck, Image, XCircle } from 'lucide-react';
 import { messageService } from './services/api';
 import socketService from './services/socket';
 import { toast } from 'react-toastify';
@@ -19,8 +19,11 @@ const Conversation = () => {
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [imageAttachment, setImageAttachment] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   // Connect to socket and initialize conversation
@@ -35,6 +38,14 @@ const Conversation = () => {
     
     // Initialize socket connection
     socketService.connect(storedUserData);
+    
+    // Periodically check socket connection and reconnect if needed
+    const connectionCheckInterval = setInterval(() => {
+      if (!socketService.isConnected()) {
+        console.log('Socket disconnected, reconnecting...');
+        socketService.connect(storedUserData);
+      }
+    }, 5000); // Check every 5 seconds
     
     // Load initial conversation data
     const fetchConversation = async () => {
@@ -65,16 +76,20 @@ const Conversation = () => {
     // Socket event handlers
     const newMessageHandler = (message) => {
       if (message.conversationId === parseInt(conversationId)) {
+        console.log('New message received via socket:', message);
         setMessages(prev => {
-          // Check if we already have this message (prevents duplicates)
-          // More thorough duplicate checking by content and timestamp proximity
+          // Better duplicate checking with proper comparison
           const exists = prev.some(m => 
-            (m.id === message.id) || 
+            (m.id && m.id === message.id) || 
             (m.content === message.content && 
              m.senderId === message.senderId &&
-             Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 5000)
+             Math.abs(new Date(m.createdAt || 0) - new Date(message.createdAt || 0)) < 5000)
           );
-          if (exists) return prev;
+          if (exists) {
+            console.log('Duplicate message detected, not adding');
+            return prev;
+          }
+          console.log('Adding new message to state');
           return [...prev, message];
         });
         
@@ -133,6 +148,8 @@ const Conversation = () => {
       socketService.off('user_typing', typingHandler);
       socketService.off('user_stop_typing', stopTypingHandler);
       
+      // Clear intervals and timeouts
+      clearInterval(connectionCheckInterval);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
@@ -146,13 +163,49 @@ const Conversation = () => {
     }
   }, [messages, isOtherUserTyping]);
 
+  // Handle file selection
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file
+    if (!file.type.startsWith('image/')) {
+      toast.error('Only image files are allowed');
+      return;
+    }
+    
+    // Limit file size to 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+    
+    setImageAttachment(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Clear image attachment
+  const clearImageAttachment = () => {
+    setImageAttachment(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Handle input change with debounced typing notifications
   const handleInputChange = (e) => {
     const value = e.target.value;
     setNewMessage(value);
     
     // Send typing indicator if value is not empty
-    if (value.trim()) {
+    if (value.trim() || imageAttachment) {
       debouncedSendTypingStatus();
     } else {
       socketService.stopTyping(conversationId);
@@ -164,18 +217,19 @@ const Conversation = () => {
     socketService.startTyping(conversationId);
   }, 500);
 
-  // Handle message send
+  // Handle message send - update to handle image
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
     const messageContent = newMessage.trim();
-    if (!messageContent || sending) return; // Prevent sending while already sending
+    if ((!messageContent && !imageAttachment) || sending) return; // Check both text and image
     
     try {
       setSending(true);
       
       // Clear input immediately for better UX
       setNewMessage('');
+      const fileToSend = imageAttachment; // Store before clearing for sending
       
       // Stop typing indicator
       socketService.stopTyping(conversationId);
@@ -183,34 +237,56 @@ const Conversation = () => {
       // Focus back on input
       messageInputRef.current?.focus();
       
+      // Create unique ID for this message
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       // Create optimistic message for UI with timestamp for reliable identification
-      const tempId = `temp-${Date.now()}`;
       const tempMessage = {
         id: tempId,
         conversationId: parseInt(conversationId),
         senderId: userData.userId,
         content: messageContent,
+        imageUrl: imagePreview, // Add image preview to temporary message
+        hasImage: !!imageAttachment,
         isRead: false,
         createdAt: new Date().toISOString(),
         sending: true
       };
       
-      // Add to UI
+      // Clear image attachment after creating temp message
+      clearImageAttachment();
+      
+      // Add to UI immediately
       setMessages(prev => [...prev, tempMessage]);
       
       let response;
       let socketSuccess = false;
       
       try {
-        // First try with socket.io
-        response = await socketService.sendMessage(conversationId, messageContent);
-        socketSuccess = true;
+        // Try sending with image if there's an attachment
+        if (fileToSend) {
+          // We'll use the REST API for file uploads since socket.io isn't ideal for binary data
+          const formData = new FormData();
+          if (messageContent) {
+            formData.append('content', messageContent);
+          }
+          formData.append('image', fileToSend);
+          
+          response = await messageService.sendMessageWithImage(conversationId, formData);
+          console.log('Message with image sent via REST API:', response);
+        } else {
+          // Text-only message - try socket first
+          response = await socketService.sendMessage(conversationId, messageContent);
+          console.log('Message sent via socket:', response);
+          socketSuccess = true;
+        }
       } catch (socketError) {
         console.warn("Socket sending failed, falling back to REST API:", socketError);
         
         // Fallback to REST API if socket fails
-        if (!socketSuccess) {
+        if (!socketSuccess && !fileToSend) {
           response = await messageService.sendMessage(conversationId, messageContent);
+          console.log('Message sent via REST API fallback:', response);
         }
       }
       
@@ -220,9 +296,18 @@ const Conversation = () => {
       
       // Replace temp message with real one
       setMessages(prev => 
-        prev.map(msg => 
-          msg.id === tempId ? { ...response, sending: false } : msg
-        )
+        prev.map(msg => {
+          if (msg.id === tempId) {
+            return { 
+              ...response, 
+              sending: false,
+              // Make sure we have the right timestamp and ID
+              id: response.id || msg.id,
+              createdAt: response.createdAt || msg.createdAt
+            };
+          }
+          return msg;
+        })
       );
       
       setSending(false);
@@ -555,7 +640,21 @@ const Conversation = () => {
                             <div className={`bg-[#800000] text-white px-3 py-2 rounded-lg ${
                               messageIndex === group.messages.length - 1 ? 'rounded-br-none' : ''
                             } ${message.failed ? 'opacity-60' : ''} shadow-md hover:shadow-lg transition-shadow`}>
-                              <p className="text-sm">{message.content}</p>
+                              {/* Add image rendering */}
+                              {(message.imageUrl || message.image) && (
+                                <div className="mb-2">
+                                  <img 
+                                    src={message.imageUrl || message.image} 
+                                    alt="Sent image" 
+                                    className="rounded max-h-60 max-w-full object-contain"
+                                    onError={(e) => {
+                                      e.target.onerror = null;
+                                      e.target.src = 'https://via.placeholder.com/200x200?text=Image+Failed';
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              {message.content && <p className="text-sm">{message.content}</p>}
                               <div className="flex items-center justify-end mt-1 space-x-1">
                                 <span className="text-[10px] text-gray-100">
                                   {new Date(message.createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
@@ -621,7 +720,21 @@ const Conversation = () => {
                           {messageIndex !== group.messages.length - 1 && <div className="mr-2 w-8"></div>}
                           <div className="max-w-[75%]">
                             <div className="bg-[#ffd700] text-[#800000] px-3 py-2 rounded-lg rounded-bl-none shadow-md hover:shadow-lg transition-shadow">
-                              <p className="text-sm font-medium">{message.content}</p>
+                              {/* Add image rendering for other user */}
+                              {(message.imageUrl || message.image) && (
+                                <div className="mb-2">
+                                  <img 
+                                    src={message.imageUrl || message.image} 
+                                    alt="Received image" 
+                                    className="rounded max-h-60 max-w-full object-contain"
+                                    onError={(e) => {
+                                      e.target.onerror = null;
+                                      e.target.src = 'https://via.placeholder.com/200x200?text=Image+Failed';
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              {message.content && <p className="text-sm font-medium">{message.content}</p>}
                               <div className="flex justify-end mt-1">
                                 <span className="text-[10px] text-[#800000]">
                                   {new Date(message.createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
@@ -671,26 +784,73 @@ const Conversation = () => {
         </div>
       </div>
 
-      {/* Message Input - Messenger Style with maroon and gold theme */}
+      {/* Image preview */}
+      {imagePreview && (
+        <div className="bg-[#800000]/10 border-t border-[#800000]/20 px-3 py-2">
+          <div className="container mx-auto max-w-2xl">
+            <div className="flex items-center">
+              <div className="relative mr-2">
+                <img 
+                  src={imagePreview} 
+                  alt="Upload preview" 
+                  className="h-16 w-16 object-cover rounded border border-[#800000]"
+                />
+                <button 
+                  onClick={clearImageAttachment}
+                  className="absolute -top-2 -right-2 bg-[#800000] text-white rounded-full p-1 shadow-md hover:bg-[#600000] transition-colors"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-[#800000]">Image ready to send</p>
+                <p className="text-xs text-[#800000]/70">Add an optional message or click send</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message Input - Updated with image upload button */}
       <div className="bg-[#800000] border-t border-[#600000] p-3">
         <div className="container mx-auto max-w-2xl">
           <form onSubmit={handleSendMessage} className="flex items-center">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="hidden"
+              disabled={sending}
+            />
+            
+            {/* Image button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending}
+              className="p-3 mr-2 rounded-full bg-[#ffd700] text-[#800000] hover:bg-[#ffeb99] hover:shadow-md transition-all duration-200 flex-shrink-0 shadow"
+            >
+              <Image size={20} />
+            </button>
+            
             <div className="flex-1 relative">
               <input
                 ref={messageInputRef}
                 type="text"
                 value={newMessage}
                 onChange={handleInputChange}
-                placeholder="Type a message..."
+                placeholder={imageAttachment ? "Add a message or send image..." : "Type a message..."}
                 className="w-full px-4 py-3 bg-[#f8f5f0] rounded-full focus:outline-none focus:ring-2 focus:ring-[#ffd700] focus:bg-white shadow-inner transition-all duration-200"
                 disabled={sending}
               />
             </div>
             <button
               type="submit"
-              disabled={!newMessage.trim() || sending}
+              disabled={(!newMessage.trim() && !imageAttachment) || sending}
               className={`ml-2 p-3 rounded-full ${
-                !newMessage.trim() || sending
+                (!newMessage.trim() && !imageAttachment) || sending
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   : 'bg-[#ffd700] text-[#800000] hover:bg-[#ffeb99] hover:shadow-md'
               } transition-all duration-200 flex-shrink-0 shadow`}
@@ -698,7 +858,7 @@ const Conversation = () => {
               {sending ? (
                 <Loader size={20} className="animate-spin" />
               ) : (
-                <Send size={20} className={!newMessage.trim() ? '' : 'fill-[#800000]'} />
+                <Send size={20} className={(!newMessage.trim() && !imageAttachment) ? '' : 'fill-[#800000]'} />
               )}
             </button>
           </form>
