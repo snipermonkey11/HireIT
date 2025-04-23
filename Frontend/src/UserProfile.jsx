@@ -31,6 +31,14 @@ const UserProfile = () => {
       
       // Fetch user profile from API
       const userData = await userService.getUserProfile(id);
+      
+      // Filter reviews to remove self-reviews (where reviewer name equals user's own name)
+      if (userData && userData.reviews && userData.reviews.length > 0) {
+        userData.reviews = userData.reviews.filter(review => 
+          review.reviewer?.name !== userData.fullName
+        );
+      }
+      
       setUser(userData);
     } catch (err) {
       if (err.response?.status === 404) {

@@ -387,150 +387,238 @@ export const transactionHistoryService = {
     }
 };
 
-// Review Service
+/**
+ * Review service for submitting and managing reviews
+ */
 export const reviewService = {
-    submitReview: async (applicationId, rating, comment, userRole, revieweeDetails) => {
+    /**
+     * Submit a review for a completed transaction
+     * 
+     * @param {number} applicationId - ID of the application being reviewed
+     * @param {number} rating - Rating from 1-5
+     * @param {string} reviewText - Optional text review
+     * @param {string} userRole - Role of the current user ('client' or 'freelancer')
+     * @param {Object} revieweeInfo - Information about who is being reviewed
+     * @param {string} revieweeInfo.revieweeName - Name of the person being reviewed
+     * @param {string} revieweeInfo.revieweeRole - Role of the person being reviewed ('client' or 'freelancer')
+     * @param {number} revieweeInfo.revieweeId - User ID of the person being reviewed
+     * @returns {Promise<Object>} - Review submission result
+     */
+    submitReview: async (applicationId, rating, reviewText, userRole, revieweeInfo) => {
         try {
-            // Get current user data for validation
-            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-            const currentUserId = userData.userId || userData.id;
+            // Log the review details for debugging
+            console.log('Review submission details:', {
+                applicationId,
+                rating,
+                reviewText: reviewText ? `${reviewText.substring(0, 20)}...` : '',
+                userRole,
+                revieweeInfo
+            });
             
-            if (!currentUserId) {
-                throw new Error('User not authenticated');
+            // Make sure we have all required information
+            if (!applicationId || !rating || !userRole || !revieweeInfo || !revieweeInfo.revieweeId) {
+                throw new Error('Missing required review information');
+            }
+
+            // Validate inputs
+            if (isNaN(applicationId) || applicationId <= 0) {
+                throw new Error('Invalid application ID');
             }
             
-            // Additional validation: make sure user isn't reviewing themselves
-            if (revieweeDetails.revieweeId === currentUserId) {
-                throw new Error('System error: You cannot review yourself');
+            if (isNaN(rating) || rating < 1 || rating > 5) {
+                throw new Error('Rating must be between 1 and 5');
             }
             
-            // Check if the userRole is valid
             if (userRole !== 'client' && userRole !== 'freelancer') {
                 throw new Error('Invalid user role');
             }
             
-            // Log submission details for debugging
-            console.log('Review submission details:', {
-                applicationId,
-                rating,
-                comment,
-                userRole,
-                revieweeDetails,
-                currentUserId
-            });
+            // Validate reviewee role matches expectations
+            if (revieweeInfo.revieweeRole !== 'client' && revieweeInfo.revieweeRole !== 'freelancer') {
+                throw new Error('Invalid reviewee role');
+            }
             
-            // Send the review
-            const response = await api.post('/reviews', {
-                applicationId,
-                rating,
-                comment,
-                userRole,
-                revieweeId: revieweeDetails.revieweeId,
-                revieweeName: revieweeDetails.revieweeName,
-                revieweeRole: revieweeDetails.revieweeRole
-            });
-            
-            return response.data;
-        } catch (err) {
-            console.error('Error submitting review:', err);
-            throw err;
-        }
-    },
+            // Ensure reviewer and reviewee roles are opposite
+            if (userRole === revieweeInfo.revieweeRole) {
+                console.error('Role conflict detected:', {
+                    userRole,
+                    revieweeRole: revieweeInfo.revieweeRole
+                });
+                throw new Error('Reviewer and reviewee roles must be different');
+            }
 
-    checkReviewEligibility: async (applicationId) => {
-        try {
-            // Get current user data for validation
+            // Check user authentication
+            const token = localStorage.getItem('token');
+            if (!token) {
+                throw new Error('You must be logged in to submit a review');
+            }
+            
+            // Get current user ID for additional validation
             const userData = JSON.parse(localStorage.getItem('userData') || '{}');
             const currentUserId = userData.userId || userData.id;
             
-            if (!currentUserId) {
-                return { eligible: false, error: 'User not authenticated' };
+            // Validate that user is not reviewing themselves
+            if (String(currentUserId) === String(revieweeInfo.revieweeId)) {
+                console.error('Self-review attempt detected', {
+                    currentUserId,
+                    revieweeId: revieweeInfo.revieweeId
+                });
+                throw new Error('Self-review is not allowed');
             }
-            
-            const response = await api.get(`/reviews/eligibility/${applicationId}`);
-            
-            // Additional client-side validation to prevent self-reviews
-            if (response.data && response.data.transaction) {
-                const transaction = response.data.transaction;
-                
-                // Extract IDs
-                const clientId = transaction.ClientId || transaction.clientId || transaction.UserId;
-                const freelancerId = transaction.FreelancerId || transaction.freelancerId || transaction.ServiceOwnerId;
-                const userRole = response.data.transaction.userRole;
-                
-                // Verify user isn't trying to review themselves
-                if (userRole === 'client' && currentUserId === freelancerId) {
-                    return { 
-                        eligible: false, 
-                        error: 'You cannot review yourself. System error detected.'
-                    };
-                }
-                
-                if (userRole === 'freelancer' && currentUserId === clientId) {
-                    return { 
-                        eligible: false, 
-                        error: 'You cannot review yourself. System error detected.'
-                    };
-                }
-            }
-            
-            return response.data;
-        } catch (err) {
-            console.error('Error checking review eligibility:', err);
-            return { 
-                eligible: false, 
-                error: err.response?.data?.error || 'Failed to check eligibility'
-            };
-        }
-    },
 
-    getServiceReviews: async (serviceId) => {
-        try {
-            const response = await api.get(`/reviews/service/${serviceId}`);
-            return response.data;
-        } catch (error) {
-            console.error('Error fetching service reviews:', error);
-            throw error;
-        }
-    },
-
-    getUserReviews: async () => {
-        try {
-            // Get reviews submitted by the current user
-            const response = await api.get('/reviews/user');
-            console.log('User reviews response:', response.data);
-            
-            if (!response.data) {
-                console.error('No data received from reviews endpoint');
-                return [];
-            }
-            
-            // Format the reviews with additional fields if needed
-            const formattedReviews = response.data.map(review => {
-                // Extract reviewee name from metadata if available
-                let revieweeName = review.ServiceOwnerName;
-                if (review.Metadata) {
-                    try {
-                        const metadata = JSON.parse(review.Metadata);
-                        if (metadata.revieweeName) {
-                            revieweeName = metadata.revieweeName;
-                        }
-                    } catch (err) {
-                        console.warn('Could not parse review metadata:', err);
+            // Submit the review
+            const response = await api.post(
+                '/reviews',
+                {
+                    applicationId,
+                    rating,
+                    reviewText: reviewText || '', // Changed from comment to reviewText to match backend
+                    userRole,
+                    revieweeInfo: {
+                        revieweeName: revieweeInfo.revieweeName,
+                        revieweeRole: revieweeInfo.revieweeRole,
+                        revieweeId: revieweeInfo.revieweeId
+                    }
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
                     }
                 }
-                
-                return {
-                    ...review,
-                    RevieweeName: review.RevieweeName || revieweeName || 'User'
-                };
-            });
+            );
             
-            return formattedReviews;
+            console.log('Review submitted successfully:', response.data);
+            return response.data;
         } catch (error) {
-            console.error('Error fetching user reviews:', error);
-            // Return empty array instead of throwing to handle gracefully
-            return [];
+            console.error('Error submitting review:', error);
+            
+            // Handle different types of errors
+            if (error.response) {
+                // Server responded with an error
+                console.error('Server error response:', error.response.data);
+                throw error;
+            } else if (error.request) {
+                // Request was made but no response received
+                throw new Error('No response from server. Please try again later.');
+            } else {
+                // Error in setting up the request
+                throw error;
+            }
+        }
+    },
+
+    /**
+     * Check if the current user is eligible to leave a review for a specific application
+     * 
+     * @param {number} applicationId - ID of the application to check eligibility for
+     * @returns {Promise<Object>} - Eligibility check result containing:
+     *   - eligible: boolean - Whether the user can leave a review
+     *   - error: string - Error message if not eligible
+     *   - transaction: Object - Transaction details if available
+     */
+    checkReviewEligibility: async (applicationId) => {
+        try {
+            if (!applicationId) {
+                throw new Error('Application ID is required');
+            }
+
+            // Check user authentication
+            const token = localStorage.getItem('token');
+            if (!token) {
+                return {
+                    eligible: false,
+                    error: 'You must be logged in to leave a review'
+                };
+            }
+
+            // Send request to eligibility endpoint
+            const response = await api.get(
+                `/reviews/eligibility/${applicationId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+
+            // Handle successful response
+            const result = response.data;
+            
+            // Return standardized result
+            return {
+                eligible: result.eligible === true,
+                error: result.error || null,
+                transaction: result.transaction || null
+            };
+        } catch (error) {
+            console.error('Error checking review eligibility:', error);
+            
+            // Handle different types of errors
+            if (error.response) {
+                // Server responded with an error
+                return {
+                    eligible: false,
+                    error: error.response.data?.error || 'Not eligible to leave a review'
+                };
+            } else if (error.request) {
+                // Request was made but no response was received
+                return {
+                    eligible: false,
+                    error: 'No response from server. Please try again later.'
+                };
+            } else {
+                // Error in setting up the request
+                return {
+                    eligible: false,
+                    error: error.message || 'An unknown error occurred'
+                };
+            }
+        }
+    },
+
+    /**
+     * Get all reviews for a specific user
+     * 
+     * @param {number} userId - ID of the user to get reviews for (optional, defaults to current user)
+     * @param {string} type - Type of reviews to get ('given' or 'received') (unused by backend)
+     * @returns {Promise<Array>} - List of reviews
+     */
+    getUserReviews: async (userId = null) => {
+        try {
+            // Get current user ID if not provided
+            if (!userId) {
+                const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+                userId = userData.userId || userData.id;
+                
+                if (!userId) {
+                    console.error('No user ID available for getUserReviews');
+                    return [];
+                }
+            }
+
+            // Check user authentication
+            const token = localStorage.getItem('token');
+            if (!token) {
+                throw new Error('You must be logged in to view reviews');
+            }
+
+            // Send request to reviews endpoint
+            const response = await api.get(
+                `/reviews/user`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+            
+            // Log response
+            console.log('getUserReviews response:', response.data);
+
+            return response.data;
+        } catch (error) {
+            console.error('Error getting user reviews:', error);
+            throw error;
         }
     },
     
@@ -538,13 +626,27 @@ export const reviewService = {
     getReceivedReviews: async () => {
         try {
             const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-            if (!userData.userId) {
+            const userId = userData.userId || userData.id;
+            
+            if (!userId) {
                 console.error('No user ID available for getReceivedReviews');
                 return [];
             }
             
+            // Get authentication token
+            const token = localStorage.getItem('token');
+            if (!token) {
+                console.error('No token available for getReceivedReviews');
+                return [];
+            }
+            
             // Make the API call to get received reviews
-            const response = await api.get(`/reviews/received`);
+            const response = await api.get(`/reviews/received`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            
             console.log('Received reviews response:', response.data);
             
             if (!response.data) {

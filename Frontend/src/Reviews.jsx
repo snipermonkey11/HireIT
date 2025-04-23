@@ -27,67 +27,67 @@ const Reviews = () => {
         setError(null);
         
         // Fetch reviews submitted by the user
-        const userReviews = await reviewService.getUserReviews();
-        console.log('User submitted reviews:', userReviews);
-        
-        // Process submitted reviews
-        const processedSubmittedReviews = (userReviews || []).map(review => {
-          // Extract reviewer data from metadata if available
-          let reviewerRole = review.ReviewerRole || 'client';
-          let reviewerName = review.ReviewerName || 'You';
-          let revieweeName = review.RevieweeName || 'Service Provider';
+        try {
+          const userReviews = await reviewService.getUserReviews();
+          console.log('User submitted reviews:', userReviews);
           
-          // Try to parse metadata for more information
-          if (review.Metadata) {
-            try {
-              const metadata = JSON.parse(review.Metadata);
-              reviewerRole = metadata.reviewerRole || reviewerRole;
-              reviewerName = metadata.reviewerName || reviewerName;
-              revieweeName = metadata.revieweeName || revieweeName;
-            } catch (err) {
-              console.warn('Could not parse review metadata:', err);
-            }
-          }
+          // Process submitted reviews
+          const processedSubmittedReviews = (userReviews || []).map(review => {
+            // Use the display properties provided by the backend, fallback to constructed ones if needed
+            return {
+              id: review.ReviewId || review.id,
+              applicationId: review.ApplicationId || review.applicationId,
+              transactionId: review.TransactionId || review.transactionId,
+              serviceId: review.ServiceId || review.serviceId,
+              reviewText: review.ReviewText || review.reviewText || '',
+              rating: review.Rating || review.rating || 0,
+              createdAt: review.CreatedAt || review.createdAt,
+              serviceTitle: review.ServiceTitle || review.serviceTitle || 'Service',
+              reviewType: 'submitted',
+              displayName: 'You',
+              displayRole: review.ReviewerRole === 'client' ? 'As a client' : 'As a freelancer',
+              revieweeName: review.RevieweeName || review.revieweeName || 'Service Provider',
+              revieweeRole: review.RevieweeRole || review.revieweeRole || 'freelancer',
+              displayText: review.displayText || `You reviewed ${review.RevieweeName || review.revieweeName || 'Service Provider'}`
+            };
+          });
           
-          return {
-            ...review,
-            reviewType: 'submitted',
-            displayName: reviewerName,
-            displayRole: reviewerRole === 'client' ? 'As a client' : 'As a freelancer',
-            revieweeName: revieweeName,
-            displayText: `You reviewed ${revieweeName}`
-          };
-        });
+          setReviews(processedSubmittedReviews);
+        } catch (submittedError) {
+          console.error('Error fetching submitted reviews:', submittedError);
+          setReviews([]);
+        }
         
         // Fetch reviews received by the user
-        const received = await reviewService.getReceivedReviews();
-        console.log('Received reviews:', received);
-        
-        // Process received reviews
-        const processedReceivedReviews = (received || []).map(review => {
-          let reviewerName = review.ReviewerName || 'Client';
+        try {
+          const received = await reviewService.getReceivedReviews();
+          console.log('Received reviews:', received);
           
-          // Try to parse metadata if available
-          if (review.Metadata) {
-            try {
-              const metadata = JSON.parse(review.Metadata);
-              reviewerName = metadata.reviewerName || reviewerName;
-            } catch (err) {
-              console.warn('Could not parse review metadata:', err);
-            }
-          }
+          // Process received reviews
+          const processedReceivedReviews = (received || []).map(review => {
+            // Use the display properties provided by the backend, fallback to constructed ones if needed
+            return {
+              id: review.ReviewId || review.id,
+              applicationId: review.ApplicationId || review.applicationId,
+              transactionId: review.TransactionId || review.transactionId,
+              serviceId: review.ServiceId || review.serviceId,
+              reviewText: review.ReviewText || review.reviewText || '',
+              rating: review.Rating || review.rating || 0,
+              createdAt: review.CreatedAt || review.createdAt,
+              serviceTitle: review.ServiceTitle || review.serviceTitle || 'Service',
+              reviewType: 'received',
+              displayName: review.ReviewerName || review.reviewerName || 'Client',
+              reviewerRole: review.ReviewerRole || review.reviewerRole || 'client',
+              revieweeRole: review.RevieweeRole || review.revieweeRole || 'freelancer',
+              displayText: review.displayText || `${review.ReviewerName || review.reviewerName || 'Client'} reviewed your service`
+            };
+          });
           
-          return {
-            ...review,
-            reviewType: 'received',
-            displayName: reviewerName,
-            displayText: `${reviewerName} reviewed your service`
-          };
-        });
-        
-        // Store both types separately
-        setReviews(processedSubmittedReviews);
-        setReceivedReviews(processedReceivedReviews);
+          setReceivedReviews(processedReceivedReviews);
+        } catch (receivedError) {
+          console.error('Error fetching received reviews:', receivedError);
+          setReceivedReviews([]);
+        }
         
       } catch (err) {
         console.error('Failed to fetch reviews:', err);
@@ -132,7 +132,7 @@ const Reviews = () => {
     if (activeTab === 'received') return receivedReviews;
     // For 'all', combine both and sort by date
     return [...reviews, ...receivedReviews].sort((a, b) => 
-      new Date(b.CreatedAt || b.createdAt) - new Date(a.CreatedAt || a.createdAt)
+      new Date(b.createdAt || b.CreatedAt || Date.now()) - new Date(a.createdAt || a.CreatedAt || Date.now())
     );
   };
 
@@ -262,7 +262,7 @@ const Reviews = () => {
               <div className="space-y-6">
                 {filteredReviews.map((review, index) => (
                   <div 
-                    key={review.ReviewId || review.id} 
+                    key={review.id || review.ReviewId || `review-${index}`} 
                     className={`p-5 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 border-l-4 
                       ${review.reviewType === 'received' 
                         ? 'bg-[#f8f5f0] border-[#800000]' 
@@ -272,7 +272,7 @@ const Reviews = () => {
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="font-semibold text-lg text-[#800000]">
-                          {review.ServiceTitle || review.serviceTitle || 'Service'}
+                          {review.serviceTitle || 'Service'}
                         </h3>
                         
                         <div className="mt-2 flex items-center flex-wrap gap-2">
@@ -301,37 +301,35 @@ const Reviews = () => {
                         </div>
                         
                         <div className="mt-3 flex items-center">
-                          {renderRatingStars(review.Rating || review.rating)}
+                          {renderRatingStars(review.rating)}
                           <span className="ml-2 text-sm text-[#800000]/70 font-medium">
-                            {review.Rating || review.rating}/5
+                            {review.rating}/5
                           </span>
                         </div>
                       </div>
                       <div className="text-sm text-[#800000]/60 bg-white px-3 py-1 rounded-full shadow-sm border border-[#FFD700]/20 flex items-center">
                         <Clock size={14} className="mr-1.5 text-[#800000]/70" />
-                        {formatDate(review.CreatedAt || review.createdAt)}
+                        {formatDate(review.createdAt)}
                       </div>
                     </div>
                     
-                    {(review.ReviewText || review.reviewText) && (
+                    {review.reviewText && (
                       <div className="mt-4 text-[#800000]/80 bg-white p-4 rounded-lg border border-[#FFD700]/20 shadow-sm italic">
-                        "{review.ReviewText || review.reviewText}"
+                        "{review.reviewText}"
                       </div>
                     )}
                     
                     <div className="mt-3 flex justify-between items-center">
                       <div className="text-xs text-[#800000]/60 bg-[#800000]/5 px-2 py-1 rounded">
-                        Transaction #{review.ApplicationId || review.applicationId}
+                        Transaction #{review.transactionId || review.applicationId}
                       </div>
                       
-                      {review.reviewType === 'received' && (
-                        <Link 
-                          to={`/transaction-history`}
-                          className="text-xs font-medium text-[#800000] hover:text-[#800000]/80 flex items-center"
-                        >
-                          View Transaction <ArrowLeft size={14} className="ml-1 transform rotate-180" />
-                        </Link>
-                      )}
+                      <Link 
+                        to={`/transaction-history`}
+                        className="text-xs font-medium text-[#800000] hover:text-[#800000]/80 flex items-center"
+                      >
+                        View Transaction <ArrowLeft size={14} className="ml-1 transform rotate-180" />
+                      </Link>
                     </div>
                   </div>
                 ))}
