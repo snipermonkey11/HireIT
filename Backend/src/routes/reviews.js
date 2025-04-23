@@ -10,7 +10,7 @@ router.post('/', verifyToken, async (req, res) => {
             return res.status(401).json({ error: 'Unauthorized - Please log in again' });
         }
         
-        const { applicationId, rating, reviewText, userRole, revieweeId, revieweeRole, revieweeName } = req.body;
+        const { applicationId, rating, reviewText, userRole, revieweeInfo } = req.body;
         const userId = req.user.userId;
         
         if (!applicationId) {
@@ -19,6 +19,11 @@ router.post('/', verifyToken, async (req, res) => {
         
         if (!rating || rating < 1 || rating > 5) {
             return res.status(400).json({ error: 'Rating is required and must be between 1 and 5' });
+        }
+        
+        // Check if revieweeInfo is provided and has the required fields
+        if (!revieweeInfo || !revieweeInfo.revieweeId) {
+            return res.status(400).json({ error: 'Reviewee information is required' });
         }
         
         const pool = await getPool();
@@ -97,9 +102,9 @@ router.post('/', verifyToken, async (req, res) => {
         }
         
         // Get reviewee details from frontend or fallback to database
-        const actualRevieweeId = revieweeId || (userRole === 'client' ? transaction.ServiceOwnerId : transaction.ClientId);
-        const actualRevieweeName = revieweeName || (userRole === 'client' ? transaction.ServiceOwnerName : transaction.ClientName);
-        const actualRevieweeRole = revieweeRole || (userRole === 'client' ? 'freelancer' : 'client');
+        const actualRevieweeId = revieweeInfo.revieweeId || (userRole === 'client' ? transaction.ServiceOwnerId : transaction.ClientId);
+        const actualRevieweeName = revieweeInfo.revieweeName || (userRole === 'client' ? transaction.ServiceOwnerName : transaction.ClientName);
+        const actualRevieweeRole = revieweeInfo.revieweeRole || (userRole === 'client' ? 'freelancer' : 'client');
         
         // Store additional metadata for the review
         const metadata = {
@@ -324,6 +329,7 @@ router.get('/user', verifyToken, async (req, res) => {
         
         // First check if ReviewerId column exists
         const hasReviewerIdColumn = await columnExists(pool, 'Reviews', 'ReviewerId');
+        const hasMetadataColumn = await columnExists(pool, 'Reviews', 'Metadata');
         
         // Use a different query based on column availability
         let query;
@@ -338,11 +344,22 @@ router.get('/user', verifyToken, async (req, res) => {
                     r.CreatedAt,
                     s.Title as ServiceTitle,
                     s.ServiceId,
-                    seller.FullName as ServiceOwnerName
+                    t.TransactionId,
+                    t.Status as TransactionStatus,
+                    seller.UserId as ServiceOwnerId,
+                    seller.FullName as ServiceOwnerName,
+                    client.UserId as ClientId,
+                    client.FullName as ClientName,
+                    CASE
+                        WHEN s.SellerId = @userId THEN 'freelancer'
+                        ELSE 'client'
+                    END as ReviewerRole
                 FROM Reviews r
                 JOIN Applications a ON r.ApplicationId = a.ApplicationId
                 JOIN Services s ON a.ServiceId = s.ServiceId
+                LEFT JOIN Transactions t ON a.ApplicationId = t.ApplicationId
                 JOIN Users seller ON s.SellerId = seller.UserId
+                JOIN Users client ON a.UserId = client.UserId
                 WHERE r.ReviewerId = @userId
                 ORDER BY r.CreatedAt DESC
             `;
@@ -357,11 +374,19 @@ router.get('/user', verifyToken, async (req, res) => {
                     r.CreatedAt,
                     s.Title as ServiceTitle,
                     s.ServiceId,
-                    seller.FullName as ServiceOwnerName
+                    t.TransactionId,
+                    t.Status as TransactionStatus,
+                    seller.UserId as ServiceOwnerId,
+                    seller.FullName as ServiceOwnerName,
+                    client.UserId as ClientId,
+                    client.FullName as ClientName,
+                    'client' as ReviewerRole
                 FROM Reviews r
                 JOIN Applications a ON r.ApplicationId = a.ApplicationId
                 JOIN Services s ON a.ServiceId = s.ServiceId
+                LEFT JOIN Transactions t ON a.ApplicationId = t.ApplicationId
                 JOIN Users seller ON s.SellerId = seller.UserId
+                JOIN Users client ON a.UserId = client.UserId
                 WHERE a.UserId = @userId
                 ORDER BY r.CreatedAt DESC
             `;
@@ -370,8 +395,51 @@ router.get('/user', verifyToken, async (req, res) => {
         const result = await pool.request()
             .input('userId', sql.Int, userId)
             .query(query);
+        
+        console.log(`Found ${result.recordset.length} reviews by user ${userId}`);
+        
+        // Process results to add reviewer and reviewee info
+        const processedResults = result.recordset.map(review => {
+            let reviewerRole = review.ReviewerRole || 'client';
+            let revieweeRole = reviewerRole === 'client' ? 'freelancer' : 'client';
             
-        res.json(result.recordset);
+            let revieweeName, revieweeId;
+            
+            if (reviewerRole === 'client') {
+                // If user is client, they're reviewing the freelancer
+                revieweeName = review.ServiceOwnerName;
+                revieweeId = review.ServiceOwnerId;
+            } else {
+                // If user is freelancer, they're reviewing the client
+                revieweeName = review.ClientName;
+                revieweeId = review.ClientId;
+            }
+            
+            // Add to the review object
+            review.RevieweeId = revieweeId;
+            review.RevieweeName = revieweeName;
+            review.RevieweeRole = revieweeRole;
+            review.ReviewerId = userId;
+            review.uniqueId = `review-${review.ReviewId}`;
+            
+            // Create display text
+            review.displayText = `You reviewed ${revieweeName} (${revieweeRole === 'client' ? 'Client' : 'Freelancer'})`;
+            
+            // If metadata exists, try to use it for additional info
+            if (hasMetadataColumn && review.Metadata) {
+                try {
+                    const metadata = JSON.parse(review.Metadata);
+                    if (metadata.revieweeName) review.RevieweeName = metadata.revieweeName;
+                    if (metadata.revieweeRole) review.RevieweeRole = metadata.revieweeRole;
+                } catch (err) {
+                    console.warn('Failed to parse review metadata:', err.message);
+                }
+            }
+            
+            return review;
+        });
+        
+        res.json(processedResults);
     } catch (error) {
         console.error('Error fetching user reviews:', error);
         res.status(500).json({ 
@@ -414,13 +482,21 @@ router.get('/received', verifyToken, async (req, res) => {
                     r.CreatedAt,
                     s.Title as ServiceTitle,
                     s.ServiceId,
+                    t.TransactionId,
+                    t.Status as TransactionStatus,
                     u_reviewer.UserId as ReviewerId,
                     u_reviewer.FullName as ReviewerName,
                     u_reviewee.UserId as RevieweeId,
-                    u_reviewee.FullName as RevieweeName
+                    u_reviewee.FullName as RevieweeName,
+                    u_reviewer.Email as ReviewerEmail,
+                    CASE
+                        WHEN s.SellerId = u_reviewer.UserId THEN 'freelancer'
+                        ELSE 'client'
+                    END as ReviewerRole
                 FROM Reviews r
                 JOIN Applications a ON r.ApplicationId = a.ApplicationId
                 JOIN Services s ON a.ServiceId = s.ServiceId
+                LEFT JOIN Transactions t ON a.ApplicationId = t.ApplicationId
                 JOIN Users u_reviewer ON r.ReviewerId = u_reviewer.UserId
                 JOIN Users u_reviewee ON r.RevieweeId = u_reviewee.UserId
                 WHERE r.RevieweeId = @userId
@@ -432,7 +508,19 @@ router.get('/received', verifyToken, async (req, res) => {
                 .query(query);
             
             console.log(`Found ${result.recordset.length} reviews using RevieweeId query`);    
-            res.json(result.recordset);
+            
+            // Enhance the result with metadata
+            const enhancedResults = result.recordset.map(review => {
+                // Add a unique transaction key
+                review.uniqueId = `review-${review.ReviewId}`;
+                
+                // Add a display text for the frontend
+                review.displayText = `${review.ReviewerName} (${review.ReviewerRole === 'client' ? 'Client' : 'Freelancer'}) reviewed your service`;
+                
+                return review;
+            });
+            
+            res.json(enhancedResults);
             
         } else if (hasMetadataColumn) {
             // If Metadata exists, query reviews where the revieweeId in metadata matches the user's ID
@@ -446,10 +534,13 @@ router.get('/received', verifyToken, async (req, res) => {
                     r.CreatedAt,
                     r.Metadata,
                     s.Title as ServiceTitle,
-                    s.ServiceId
+                    s.ServiceId,
+                    t.TransactionId,
+                    t.Status as TransactionStatus
                 FROM Reviews r
                 JOIN Applications a ON r.ApplicationId = a.ApplicationId
                 JOIN Services s ON a.ServiceId = s.ServiceId
+                LEFT JOIN Transactions t ON a.ApplicationId = t.ApplicationId
                 WHERE 
                     r.Metadata LIKE '%"revieweeId":' + CAST(@userId AS NVARCHAR(20)) + '%'
                     OR r.Metadata LIKE '%"revieweeId": ' + CAST(@userId AS NVARCHAR(20)) + '%'
@@ -465,13 +556,21 @@ router.get('/received', verifyToken, async (req, res) => {
             // Process metadata to extract reviewer information
             const processedResults = result.recordset.map(review => {
                 try {
+                    review.uniqueId = `review-${review.ReviewId}`;
+                    
                     if (review.Metadata) {
                         const metadata = JSON.parse(review.Metadata);
-                        review.ReviewerName = metadata.reviewerName;
-                        review.RevieweeName = metadata.revieweeName;
+                        review.ReviewerName = metadata.reviewerName || 'Reviewer';
+                        review.RevieweeName = metadata.revieweeName || 'You';
+                        review.ReviewerId = metadata.reviewerId;
+                        review.RevieweeId = metadata.revieweeId;
+                        review.ReviewerRole = metadata.reviewerRole || 'client';
+                        review.displayText = `${review.ReviewerName} (${review.ReviewerRole === 'client' ? 'Client' : 'Freelancer'}) reviewed your service`;
                     }
                 } catch (err) {
                     console.warn('Failed to parse review metadata:', err.message);
+                    review.ReviewerName = 'Unknown Reviewer';
+                    review.displayText = 'Someone reviewed your service';
                 }
                 return review;
             });
@@ -490,11 +589,17 @@ router.get('/received', verifyToken, async (req, res) => {
                     r.CreatedAt,
                     s.Title as ServiceTitle,
                     s.ServiceId,
+                    t.TransactionId,
+                    t.Status as TransactionStatus,
+                    c.UserId as ReviewerId,
                     c.FullName as ReviewerName,
-                    so.FullName as RevieweeName
+                    so.UserId as RevieweeId,
+                    so.FullName as RevieweeName,
+                    'client' as ReviewerRole
                 FROM Reviews r
                 JOIN Applications a ON r.ApplicationId = a.ApplicationId
                 JOIN Services s ON a.ServiceId = s.ServiceId
+                LEFT JOIN Transactions t ON a.ApplicationId = t.ApplicationId
                 JOIN Users c ON a.UserId = c.UserId
                 JOIN Users so ON s.SellerId = so.UserId
                 WHERE s.SellerId = @userId
@@ -505,8 +610,16 @@ router.get('/received', verifyToken, async (req, res) => {
                 .input('userId', sql.Int, userId)
                 .query(query);
             
-            console.log(`Found ${result.recordset.length} reviews using seller fallback query`);    
-            res.json(result.recordset);
+            console.log(`Found ${result.recordset.length} reviews using seller fallback query`);
+            
+            // Enhance results with display text
+            const enhancedResults = result.recordset.map(review => {
+                review.uniqueId = `review-${review.ReviewId}`;
+                review.displayText = `${review.ReviewerName} (Client) reviewed your service`;
+                return review;
+            });
+            
+            res.json(enhancedResults);
         }
         
     } catch (error) {
@@ -869,13 +982,18 @@ router.get('/eligibility/:applicationId', verifyToken, async (req, res) => {
         const formattedTransaction = {
             id: transaction.TransactionId,
             applicationId: parseInt(applicationId),
+            clientId: transaction.ClientId,
             clientName: transaction.ClientName,
+            freelancerId: transaction.ServiceOwnerId,
             freelancerName: transaction.ServiceOwnerName,
             serviceTitle: transaction.ServiceTitle,
             status: transaction.TransactionStatus,
             userRole: transaction.UserRole,
             postType: transaction.PostType
         };
+        
+        // Log what we're sending to the frontend
+        console.log('Sending formatted transaction to frontend:', formattedTransaction);
         
         // All checks passed
         res.json({
