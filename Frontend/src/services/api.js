@@ -389,58 +389,97 @@ export const transactionHistoryService = {
 
 // Review Service
 export const reviewService = {
-    submitReview: async (applicationId, rating, reviewText, userRole, revieweeInfo = {}) => {
+    submitReview: async (applicationId, rating, comment, userRole, revieweeDetails) => {
         try {
-            console.log('Review submission params:', {
+            // Get current user data for validation
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const currentUserId = userData.userId || userData.id;
+            
+            if (!currentUserId) {
+                throw new Error('User not authenticated');
+            }
+            
+            // Additional validation: make sure user isn't reviewing themselves
+            if (revieweeDetails.revieweeId === currentUserId) {
+                throw new Error('System error: You cannot review yourself');
+            }
+            
+            // Check if the userRole is valid
+            if (userRole !== 'client' && userRole !== 'freelancer') {
+                throw new Error('Invalid user role');
+            }
+            
+            // Log submission details for debugging
+            console.log('Review submission details:', {
                 applicationId,
                 rating,
-                reviewText,
-                userRole: userRole || 'client',
-                revieweeInfo
+                comment,
+                userRole,
+                revieweeDetails,
+                currentUserId
             });
             
-            // Validate the userRole to ensure it's either 'client' or 'freelancer'
-            const validatedRole = userRole === 'freelancer' ? 'freelancer' : 'client';
-            
+            // Send the review
             const response = await api.post('/reviews', {
                 applicationId,
                 rating,
-                reviewText,
-                userRole: validatedRole,
-                revieweeId: revieweeInfo.revieweeId,
-                revieweeRole: revieweeInfo.revieweeRole,
-                revieweeName: revieweeInfo.revieweeName
+                comment,
+                userRole,
+                revieweeId: revieweeDetails.revieweeId,
+                revieweeName: revieweeDetails.revieweeName,
+                revieweeRole: revieweeDetails.revieweeRole
             });
             
-            console.log('Review submission successful:', response.data);
             return response.data;
-        } catch (error) {
-            console.error('Error submitting review:', error);
-            throw error;
+        } catch (err) {
+            console.error('Error submitting review:', err);
+            throw err;
         }
     },
 
     checkReviewEligibility: async (applicationId) => {
         try {
-            // Call the backend eligibility endpoint
-            const response = await api.get(`/reviews/eligibility/${applicationId}`);
-            return response.data;
-        } catch (error) {
-            console.error('Error checking review eligibility:', error);
+            // Get current user data for validation
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const currentUserId = userData.userId || userData.id;
             
-            // Format the error response to be consistent with our expected format
-            if (error.response?.data) {
-                // Use the backend's error message if available
-                return {
-                    eligible: false,
-                    error: error.response.data.error || error.response.data.details || 'Failed to check eligibility'
-                };
+            if (!currentUserId) {
+                return { eligible: false, error: 'User not authenticated' };
             }
             
-            // Generic error
+            const response = await api.get(`/reviews/eligibility/${applicationId}`);
+            
+            // Additional client-side validation to prevent self-reviews
+            if (response.data && response.data.transaction) {
+                const transaction = response.data.transaction;
+                
+                // Extract IDs
+                const clientId = transaction.ClientId || transaction.clientId || transaction.UserId;
+                const freelancerId = transaction.FreelancerId || transaction.freelancerId || transaction.ServiceOwnerId;
+                const userRole = response.data.transaction.userRole;
+                
+                // Verify user isn't trying to review themselves
+                if (userRole === 'client' && currentUserId === freelancerId) {
+                    return { 
+                        eligible: false, 
+                        error: 'You cannot review yourself. System error detected.'
+                    };
+                }
+                
+                if (userRole === 'freelancer' && currentUserId === clientId) {
+                    return { 
+                        eligible: false, 
+                        error: 'You cannot review yourself. System error detected.'
+                    };
+                }
+            }
+            
+            return response.data;
+        } catch (err) {
+            console.error('Error checking review eligibility:', err);
             return { 
                 eligible: false, 
-                error: error.message || 'Failed to check eligibility. Please try again later.' 
+                error: err.response?.data?.error || 'Failed to check eligibility'
             };
         }
     },

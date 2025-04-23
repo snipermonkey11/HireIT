@@ -27,7 +27,16 @@ router.get('/:applicationId', verifyToken, async (req, res) => {
                -- For freelancer services, these names are opposite to their actual roles
                client.FullName as ClientName, client.Email as ClientEmail,
                freelancer.FullName as FreelancerName, freelancer.Email as FreelancerEmail,
-               ISNULL(freelancer.GcashQR, '') as FreelancerGcashQR,
+               -- For client posts, the freelancer is the applicant
+               -- For freelancer posts, the freelancer is the service owner (client in DB)
+               CASE 
+                 WHEN s.PostType = 'client' THEN ISNULL(freelancer.GcashQR, '') 
+                 WHEN s.PostType = 'freelancer' THEN ISNULL(client.GcashQR, '')
+               END as FreelancerGcashQR,
+               CASE 
+                 WHEN s.PostType = 'client' THEN ISNULL(freelancer.GcashQr, '') 
+                 WHEN s.PostType = 'freelancer' THEN ISNULL(client.GcashQr, '')
+               END as FreelancerGcashQr,
                a.Status as ApplicationStatus
         FROM Transactions t
         JOIN Applications a ON t.ApplicationId = a.ApplicationId
@@ -108,12 +117,14 @@ router.get('/:applicationId', verifyToken, async (req, res) => {
         {
           id: transaction.ServiceOwnerId,
           name: transaction.ClientName,
-          email: transaction.ClientEmail
+          email: transaction.ClientEmail,
+          qrCode: transaction.FreelancerGcashQr || transaction.FreelancerGcashQR || '' // For freelancer services, the freelancer is the service owner
         } : 
         {
           id: transaction.ApplicantId,
           name: transaction.FreelancerName,
-          email: transaction.FreelancerEmail
+          email: transaction.FreelancerEmail,
+          qrCode: transaction.FreelancerGcashQr || transaction.FreelancerGcashQR || '' // For client requests, the freelancer is the applicant
         },
       canPay,
       isClient,
@@ -121,7 +132,8 @@ router.get('/:applicationId', verifyToken, async (req, res) => {
       userRole: isClient ? 'client' : 'freelancer',
       payerRole: transaction.PostType.toLowerCase() === 'freelancer' ? 'client' : 'freelancer',
       payeeRole: transaction.PostType.toLowerCase() === 'freelancer' ? 'freelancer' : 'client',
-      FreelancerGcashQR: transaction.FreelancerGcashQR
+      // Include only freelancer QR code with both possible field names
+      FreelancerGcashQR: transaction.FreelancerGcashQR || transaction.FreelancerGcashQr || ''
     };
 
     console.log('Sending updated response with corrected roles:', JSON.stringify(response, null, 2));

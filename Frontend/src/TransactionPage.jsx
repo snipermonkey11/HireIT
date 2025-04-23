@@ -125,21 +125,38 @@ const TransactionPage = () => {
         
         // Only process QR code if the current user is the client (payer) to see freelancer's QR
         if (isClient) {
-          // First, try to get the QR from the payee directly (for client posts)
+          // FIXED: Always show the payee's QR code (freelancer) regardless of post type
+          // The payee is always the freelancer, who receives the payment
           if (response.data.payee?.qrCode) {
             qrCodeToShow = response.data.payee.qrCode;
           } 
-          // Then try to get the dedicated freelancer QR field (for freelancer posts)
+          // Try additional fields where the QR might be stored
           else if (response.data.FreelancerGcashQR) {
             qrCodeToShow = response.data.FreelancerGcashQR;
           }
+          else if (response.data.freelancerGcashQR) {
+            qrCodeToShow = response.data.freelancerGcashQR;
+          }
+          else if (response.data.freelancerQRCode) {
+            qrCodeToShow = response.data.freelancerQRCode;
+          }
+          
+          // Additional logging for debugging
+          console.log('All possible QR code fields:', {
+            payeeQrCode: response.data.payee?.qrCode,
+            FreelancerGcashQR: response.data.FreelancerGcashQR,
+            freelancerGcashQR: response.data.freelancerGcashQR,
+            freelancerQRCode: response.data.freelancerQRCode
+          });
         }
         
         console.log('QR Code selection:', {
           isClient,
           qrCodeFound: qrCodeToShow ? true : false,
           qrSource: qrCodeToShow === response.data.payee?.qrCode ? 'From payee' : 
-                    qrCodeToShow === response.data.FreelancerGcashQR ? 'From FreelancerGcashQR' : 'None'
+                    qrCodeToShow === response.data.FreelancerGcashQR ? 'From FreelancerGcashQR' : 
+                    qrCodeToShow === response.data.freelancerGcashQR ? 'From freelancerGcashQR' : 
+                    qrCodeToShow === response.data.freelancerQRCode ? 'From freelancerQRCode' : 'None'
         });
         
         // Set transaction with correct role info

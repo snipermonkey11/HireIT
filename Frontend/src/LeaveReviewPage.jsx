@@ -22,6 +22,17 @@ const LeaveReviewPage = () => {
         setIsLoading(true);
         setError(null);
         
+        // Get current user data for validation
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        const currentUserId = userData.userId || userData.id;
+        
+        if (!currentUserId) {
+          setError('User information not found. Please log in again.');
+          return;
+        }
+        
+        console.log('Current User ID:', currentUserId);
+        
         // First check if the user is eligible to leave a review
         const eligibilityResponse = await reviewService.checkReviewEligibility(applicationId);
         
@@ -35,6 +46,13 @@ const LeaveReviewPage = () => {
         // If eligible, use the transaction directly from the eligibility response
         if (eligibilityResponse.transaction) {
           console.log('TRANSACTION:', eligibilityResponse.transaction);
+          console.log('TRANSACTION FIELDS:', Object.keys(eligibilityResponse.transaction));
+          console.log('CLIENT AND FREELANCER INFO:', {
+            clientId: eligibilityResponse.transaction.ClientId || eligibilityResponse.transaction.clientId || eligibilityResponse.transaction.UserId,
+            freelancerId: eligibilityResponse.transaction.FreelancerId || eligibilityResponse.transaction.freelancerId || eligibilityResponse.transaction.ServiceOwnerId,
+            clientName: eligibilityResponse.transaction.clientName || eligibilityResponse.transaction.ClientName,
+            freelancerName: eligibilityResponse.transaction.freelancerName || eligibilityResponse.transaction.FreelancerName || eligibilityResponse.transaction.ServiceOwnerName
+          });
           
           // Get the userRole directly from the backend response
           // The backend correctly determines if the user is a client or freelancer based on the transaction
@@ -47,7 +65,50 @@ const LeaveReviewPage = () => {
             return;
           }
           
-          setTransaction(eligibilityResponse.transaction);
+          // Normalize transaction data to ensure all fields are available regardless of source format
+          const normalizedTransaction = {
+            ...eligibilityResponse.transaction,
+            // Ensure we have standardized field names regardless of source format
+            TransactionId: eligibilityResponse.transaction.TransactionId || eligibilityResponse.transaction.id,
+            id: eligibilityResponse.transaction.id || eligibilityResponse.transaction.TransactionId,
+            // Client fields
+            ClientId: eligibilityResponse.transaction.ClientId || eligibilityResponse.transaction.clientId || eligibilityResponse.transaction.UserId,
+            clientId: eligibilityResponse.transaction.clientId || eligibilityResponse.transaction.ClientId || eligibilityResponse.transaction.UserId,
+            ClientName: eligibilityResponse.transaction.ClientName || eligibilityResponse.transaction.clientName || 'Client',
+            clientName: eligibilityResponse.transaction.clientName || eligibilityResponse.transaction.ClientName || 'Client',
+            // Freelancer fields
+            FreelancerId: eligibilityResponse.transaction.FreelancerId || eligibilityResponse.transaction.freelancerId || eligibilityResponse.transaction.ServiceOwnerId,
+            freelancerId: eligibilityResponse.transaction.freelancerId || eligibilityResponse.transaction.FreelancerId || eligibilityResponse.transaction.ServiceOwnerId,
+            FreelancerName: eligibilityResponse.transaction.FreelancerName || eligibilityResponse.transaction.freelancerName || eligibilityResponse.transaction.ServiceOwnerName || 'Freelancer',
+            freelancerName: eligibilityResponse.transaction.freelancerName || eligibilityResponse.transaction.FreelancerName || eligibilityResponse.transaction.ServiceOwnerName || 'Freelancer',
+            // Make sure post type is available
+            postType: eligibilityResponse.transaction.postType || 'client' // Default to client if not specified
+          };
+          
+          console.log('NORMALIZED TRANSACTION:', normalizedTransaction);
+          
+          // Verify user is not trying to review themselves
+          const clientId = normalizedTransaction.ClientId || normalizedTransaction.clientId;
+          const freelancerId = normalizedTransaction.FreelancerId || normalizedTransaction.freelancerId;
+          
+          console.log('Role verification:', {
+            currentUserId,
+            clientId,
+            freelancerId,
+            userRole: roleFromTransaction
+          });
+          
+          if (roleFromTransaction === 'client' && currentUserId === freelancerId) {
+            setError('System error: You cannot review yourself. Please contact support.');
+            return;
+          }
+          
+          if (roleFromTransaction === 'freelancer' && currentUserId === clientId) {
+            setError('System error: You cannot review yourself. Please contact support.');
+            return;
+          }
+          
+          setTransaction(normalizedTransaction);
           setUserRole(roleFromTransaction);
         } else {
           // Fallback to get transaction details
@@ -72,7 +133,43 @@ const LeaveReviewPage = () => {
             return;
           }
           
-          setTransaction(matchingTransaction);
+          // Normalize transaction data from transaction history
+          const normalizedTransaction = {
+            ...matchingTransaction,
+            // Ensure we have standardized field names regardless of source format
+            TransactionId: matchingTransaction.TransactionId || matchingTransaction.id,
+            id: matchingTransaction.id || matchingTransaction.TransactionId,
+            // Client fields
+            ClientId: matchingTransaction.ClientId || matchingTransaction.clientId || matchingTransaction.UserId,
+            clientId: matchingTransaction.clientId || matchingTransaction.ClientId || matchingTransaction.UserId,
+            ClientName: matchingTransaction.ClientName || matchingTransaction.clientName || 'Client',
+            clientName: matchingTransaction.clientName || matchingTransaction.ClientName || 'Client',
+            // Freelancer fields
+            FreelancerId: matchingTransaction.FreelancerId || matchingTransaction.freelancerId || matchingTransaction.ServiceOwnerId,
+            freelancerId: matchingTransaction.freelancerId || matchingTransaction.FreelancerId || matchingTransaction.ServiceOwnerId,
+            FreelancerName: matchingTransaction.FreelancerName || matchingTransaction.freelancerName || matchingTransaction.ServiceOwnerName || 'Freelancer',
+            freelancerName: matchingTransaction.freelancerName || matchingTransaction.FreelancerName || matchingTransaction.ServiceOwnerName || 'Freelancer',
+            // Make sure post type is available
+            postType: matchingTransaction.postType || 'client' // Default to client if not specified
+          };
+          
+          console.log('NORMALIZED TRANSACTION:', normalizedTransaction);
+          
+          // Verify user is not trying to review themselves
+          const clientId = normalizedTransaction.ClientId || normalizedTransaction.clientId;
+          const freelancerId = normalizedTransaction.FreelancerId || normalizedTransaction.freelancerId;
+          
+          if (roleFromTransaction === 'client' && currentUserId === freelancerId) {
+            setError('System error: You cannot review yourself. Please contact support.');
+            return;
+          }
+          
+          if (roleFromTransaction === 'freelancer' && currentUserId === clientId) {
+            setError('System error: You cannot review yourself. Please contact support.');
+            return;
+          }
+          
+          setTransaction(normalizedTransaction);
           setUserRole(roleFromTransaction);
         }
       } catch (err) {
@@ -110,6 +207,10 @@ const LeaveReviewPage = () => {
       setIsSubmitting(true);
       setError(null);
       
+      // Get current user data for validation
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      const currentUserId = userData.userId || userData.id;
+      
       // Validate user role before submission
       if (!userRole || (userRole !== 'client' && userRole !== 'freelancer')) {
         console.error('Invalid user role for review submission:', userRole);
@@ -119,16 +220,62 @@ const LeaveReviewPage = () => {
       
       // Get reviewee information
       const revieweeName = getRevieweeName();
-      const revieweeRole = getRevieweeRole() === 'Freelancer' ? 'freelancer' : 'client';
+      const revieweeRole = getRevieweeRole().toLowerCase(); // Lowercase for API submission
       
-      // Determine reviewee ID - this is crucial for proper review assignment
+      // Determine reviewee ID based on roles AND post type
       let revieweeId;
       if (userRole === 'client') {
-        // If user is client, reviewee is the freelancer (service owner)
-        revieweeId = transaction.ServiceOwnerId || transaction.sellerId || transaction.freelancerId;
+        // Client is reviewing the freelancer
+        if (transaction.postType === 'client') {
+          // For client requests: freelancer is the applicant
+          revieweeId = transaction.FreelancerId || transaction.freelancerId || transaction.ApplicantId;
+        } else {
+          // For freelancer services: freelancer is the service owner
+          revieweeId = transaction.ServiceOwnerId || transaction.sellerId;
+        }
+        
+        // Additional debugging
+        console.log('Client reviewing freelancer:', {
+          revieweeId,
+          currentUserId,
+          postType: transaction.postType,
+          availableIds: {
+            FreelancerId: transaction.FreelancerId,
+            freelancerId: transaction.freelancerId,
+            ServiceOwnerId: transaction.ServiceOwnerId,
+            ApplicantId: transaction.ApplicantId,
+            sellerId: transaction.sellerId
+          }
+        });
       } else {
-        // If user is freelancer, reviewee is the client
-        revieweeId = transaction.ClientId || transaction.clientId || transaction.UserId;
+        // Freelancer is reviewing the client
+        if (transaction.postType === 'client') {
+          // For client requests: client is the service owner
+          revieweeId = transaction.ServiceOwnerId || transaction.ClientId || transaction.clientId || transaction.UserId;
+        } else {
+          // For freelancer services: client is the applicant
+          revieweeId = transaction.ApplicantId || transaction.UserId || transaction.clientId;
+        }
+        
+        // Additional debugging
+        console.log('Freelancer reviewing client:', {
+          revieweeId,
+          currentUserId,
+          postType: transaction.postType,
+          availableIds: {
+            ClientId: transaction.ClientId, 
+            clientId: transaction.clientId,
+            ServiceOwnerId: transaction.ServiceOwnerId,
+            ApplicantId: transaction.ApplicantId,
+            UserId: transaction.UserId
+          }
+        });
+      }
+      
+      // Verify not reviewing self
+      if (revieweeId === currentUserId) {
+        setError('System error: You cannot review yourself. Please contact support.');
+        return;
       }
       
       console.log('Submitting review with details:', {
@@ -139,6 +286,8 @@ const LeaveReviewPage = () => {
         revieweeRole: revieweeRole,
         revieweeName: revieweeName,
         revieweeId: revieweeId,
+        currentUserId: currentUserId,
+        postType: transaction.postType
       });
       
       // Submit the review with complete information
@@ -184,12 +333,53 @@ const LeaveReviewPage = () => {
   const getRevieweeName = () => {
     if (!transaction) return '';
     
-    // If user role is client, then reviewee is the freelancer (service owner)
-    // If user role is freelancer, then reviewee is the client
+    // Get current user data for comparison
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const currentUserId = userData.userId || userData.id;
+    
+    // Get the name of the person being reviewed based on user role AND post type
     if (userRole === 'client') {
-      return transaction.freelancerName || transaction.ServiceOwnerName || 'Freelancer';
+      // If user is client, they review the freelancer
+      // For client posts, freelancer is the applicant
+      // For freelancer posts, freelancer is the service owner
+      const freelancerId = transaction.postType === 'client' 
+        ? transaction.FreelancerId || transaction.freelancerId || transaction.ApplicantId
+        : transaction.ServiceOwnerId || transaction.sellerId;
+      
+      // Make sure we're not returning our own name
+      if (currentUserId === freelancerId) {
+        console.error('Role determination issue: Current user is both client and freelancer', {
+          currentUserId,
+          freelancerId,
+          transaction
+        });
+        return 'Error: User role conflict';
+      }
+      
+      return transaction.postType === 'client'
+        ? transaction.freelancerName || transaction.FreelancerName || 'Freelancer'
+        : transaction.ServiceOwnerName || transaction.ClientName || 'Freelancer';
     } else {
-      return transaction.clientName || transaction.ClientName || 'Client';
+      // If user is freelancer, they review the client
+      // For client posts, client is the service owner
+      // For freelancer posts, client is the applicant
+      const clientId = transaction.postType === 'client'
+        ? transaction.ServiceOwnerId || transaction.ClientId || transaction.clientId || transaction.UserId
+        : transaction.ApplicantId || transaction.UserId;
+      
+      // Make sure we're not returning our own name
+      if (currentUserId === clientId) {
+        console.error('Role determination issue: Current user is both freelancer and client', {
+          currentUserId,
+          clientId,
+          transaction
+        });
+        return 'Error: User role conflict';
+      }
+      
+      return transaction.postType === 'client'
+        ? transaction.clientName || transaction.ClientName || transaction.ownerName || 'Client'
+        : transaction.FreelancerName || transaction.clientName || 'Client';
     }
   };
 
@@ -197,8 +387,8 @@ const LeaveReviewPage = () => {
   const getRevieweeRole = () => {
     if (!transaction) return '';
     
-    // The reviewee's role is the opposite of the current user's role
-    return userRole === 'client' ? 'freelancer' : 'client';
+    // The reviewee's role is always the opposite of the current user's role
+    return userRole === 'client' ? 'Freelancer' : 'Client';
   };
 
   // Get rating text based on the rating value
@@ -306,19 +496,19 @@ const LeaveReviewPage = () => {
                 {transaction.serviceTitle}
               </h3>
               <div className="text-[#800000]/80">
-                <p className="mb-4">Transaction #{transaction.id}</p>
+                <p className="mb-4">Transaction #{transaction.id || transaction.TransactionId}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white p-4 rounded-lg border border-[#FFD700]/20 shadow-sm transition-all hover:shadow-md">
                     <p className="text-[#800000] font-medium flex items-center">
                       <span className="inline-block w-3 h-3 bg-[#800000] rounded-full mr-2"></span>
                       <span className="font-bold">Your role:</span> 
-                      <span className="ml-2">{userRole === 'client' ? 'Client' : 'Freelancer'}</span>
+                      <span className="ml-2">{userRole === 'client' ? 'Client (Service Requester)' : 'Freelancer (Service Provider)'}</span>
                     </p>
                   </div>
                   <div className="bg-white p-4 rounded-lg border border-[#FFD700]/20 shadow-sm transition-all hover:shadow-md">
                     <p className="text-[#800000] font-medium flex items-center">
                       <span className="inline-block w-3 h-3 bg-[#FFD700] rounded-full mr-2"></span>
-                      <span className="font-bold">You are rating:</span> 
+                      <span className="font-bold">You are reviewing:</span> 
                       <span className="ml-2">{getRevieweeName()} ({getRevieweeRole()})</span>
                     </p>
                   </div>
@@ -369,7 +559,7 @@ const LeaveReviewPage = () => {
                   <textarea
                     value={reviewText}
                     onChange={(e) => setReviewText(e.target.value)}
-                    placeholder={`Tell others about your experience with this ${getRevieweeRole().toLowerCase()}...`}
+                    placeholder={`Tell others about your experience with this ${getRevieweeRole()}...`}
                     className="w-full h-32 p-4 border-2 border-[#FFD700]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#800000] focus:border-[#FFD700] bg-white shadow-sm resize-none transition-all"
                   ></textarea>
                   <div className="absolute bottom-3 right-3 text-[#800000]/50 text-sm">
