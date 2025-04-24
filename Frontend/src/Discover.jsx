@@ -724,17 +724,6 @@ const Discover = () => {
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#800000] to-transparent opacity-40"></div>
                   
-                  {/* Post Type Badge */}
-                  <div className="absolute top-0 left-0 m-4">
-                    <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full font-semibold text-xs ${
-                      service.PostType === 'client' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-[#800000] text-white'
-                    }`}>
-                      {service.PostType === 'client' ? '👥 Client Need' : '💼 Freelancer Service'}
-                    </span>
-                  </div>
-                  
                   {/* Category Badge */}
                   <div className="absolute top-0 right-0 m-4">
                     <span className="inline-flex items-center justify-center px-3 py-1 bg-[#ffd700] text-[#800000] rounded-full font-semibold text-xs">
@@ -764,10 +753,10 @@ const Discover = () => {
                       </svg>
                       <span className="text-sm font-medium">{service.SellerName}</span>
               </Link>
-              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                service.PostType === 'client' 
-                  ? 'bg-blue-100 text-blue-700' 
-                  : 'bg-[#fff3cd] text-[#800000]'
+              <span className={`text-xs font-medium px-2 py-1 rounded-full uppercase tracking-wide ${
+                service.PostType === 'client'
+                  ? 'bg-[#800000] text-[#ffd700] border-2 border-[#ffd700]'
+                  : 'bg-[#ffd700] text-[#800000] border-2 border-[#800000]'
               }`}>
                 {service.PostType === 'client' ? 'Looking for Freelancer' : 'Offering Service'}
               </span>
@@ -782,10 +771,10 @@ const Discover = () => {
                     ) : (
                       <Link
                         to={`/apply/${service.ServiceId}`}
-                        className={`block w-full text-center py-3 px-4 rounded-full font-medium transition-all duration-300 ${
+                        className={`block w-full text-center py-3 px-4 rounded-full font-medium uppercase tracking-wide transition-colors duration-300 shadow-lg ${
                           service.PostType === 'client'
-                            ? 'bg-blue-500 text-white hover:bg-blue-600'
-                            : 'bg-[#800000] text-white hover:bg-[#600000]'
+                            ? 'bg-[#800000] text-[#ffd700] hover:bg-[#600000]'
+                            : 'bg-[#ffd700] text-[#800000] hover:bg-[#e6c200]'
                         }`}
                       >
                         {service.PostType === 'client' ? 'Offer Your Services' : 'Apply Now'}
