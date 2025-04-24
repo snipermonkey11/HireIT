@@ -216,21 +216,32 @@ const TransactionPage = () => {
     doc.setFont('helvetica', 'bold');
     doc.text('Service Details', 20, startY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Service: ${transaction.ServiceTitle}`, 20, startY + lineHeight * 2);
-    doc.text(`Category: ${transaction.ServiceCategory}`, 20, startY + lineHeight * 3);
+    doc.text(`Service: ${transaction.serviceTitle || 'N/A'}`, 20, startY + lineHeight * 2);
+    doc.text(`Category: ${transaction.serviceCategory || transaction.category || transaction.type || 
+    (transaction.postType === 'client' ? 'Client Request' : 'Freelancer Service')}`, 20, startY + lineHeight * 3);
     
     // Payment details
     doc.setFont('helvetica', 'bold');
     doc.text('Payment Information', 20, startY + lineHeight * 5);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Transaction ID: ${transaction.TransactionId}`, 20, startY + lineHeight * 6);
-    doc.text(`Amount Paid: ₱${transaction.Amount?.toLocaleString()}`, 20, startY + lineHeight * 7);
-    doc.text(`Payment Method: ${paymentMethod}`, 20, startY + lineHeight * 8);
+    doc.text(`Transaction ID: ${transaction.transactionId || transaction.id || 'N/A'}`, 20, startY + lineHeight * 6);
+    doc.text(`Amount Paid: ₱${(transaction.amount || 0).toLocaleString()}`, 20, startY + lineHeight * 7);
+    doc.text(`Payment Method: ${paymentMethod || 'N/A'}`, 20, startY + lineHeight * 8);
     doc.text(`Date: ${new Date().toLocaleString()}`, 20, startY + lineHeight * 9);
     
     if (paymentMethod === 'GCash') {
-      doc.text(`GCash Reference: ${gcashReference}`, 20, startY + lineHeight * 10);
+      doc.text(`GCash Reference: ${gcashReference || 'N/A'}`, 20, startY + lineHeight * 10);
     }
+    
+    // Add payer and payee information
+    const payerName = transaction.payer?.name || 'N/A';
+    const payeeName = transaction.payee?.name || 'N/A';
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('Transaction Parties', 20, startY + lineHeight * 12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Client: ${payerName}`, 20, startY + lineHeight * 13);
+    doc.text(`Freelancer: ${payeeName}`, 20, startY + lineHeight * 14);
     
     // Footer
     doc.setFillColor(128, 0, 0);
@@ -239,7 +250,7 @@ const TransactionPage = () => {
     doc.setFontSize(10);
     doc.text('Thank you for choosing HireIT!', 105, 275, { align: 'center' });
     
-    doc.save(`HireIT_Receipt_${transaction.TransactionId}.pdf`);
+    doc.save(`HireIT_Receipt_${transaction.transactionId || transaction.id || 'receipt'}.pdf`);
   };
 
   const handlePaymentSent = async () => {
