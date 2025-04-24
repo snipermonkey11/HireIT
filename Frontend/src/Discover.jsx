@@ -733,11 +733,11 @@ const Discover = () => {
                 </div>
                 
                 <div className="p-6">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-xl font-bold text-[#800000] hover:text-[#600000] transition-all duration-300">
-              {service.Title}
-            </h3>
-                    <p className="text-lg font-bold text-[#800000]">₱{service.Price}</p>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4">
+                    <h3 className="text-xl font-bold text-[#800000] hover:text-[#600000] transition-all duration-300 mb-2 sm:mb-0 sm:mr-4 sm:max-w-[70%]">
+                      {service.Title}
+                    </h3>
+                    <p className="text-lg font-bold text-[#800000] bg-[#fff3cd] px-3 py-1 rounded-md self-start">₱{service.Price}</p>
                   </div>
                   
                   <p className="text-sm text-gray-600 h-16 overflow-hidden">{service.Description}</p>
